@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlmodel
+sqlalchemy
+python-dateutil
+httpx
+python-dotenv
+pypdf
+chromadb
