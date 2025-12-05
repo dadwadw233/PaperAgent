@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.log
+*.pyc
+__pycache__/
+.DS_Store
+.pipeline_jobs/
+paper_agent.db
+chroma_store/
+My Library.csv
