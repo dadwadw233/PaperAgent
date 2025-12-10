@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [query, setQuery] = useState("");
   const [itemType, setItemType] = useState("");
+  const [searchField, setSearchField] = useState("title_abstract");
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [listLoading, setListLoading] = useState(false);
@@ -48,6 +49,7 @@ const App: React.FC = () => {
         item_type: itemType || undefined,
         limit: PAGE_SIZE,
         offset: 0,
+        search_fields: searchField || undefined,
       });
       setPapers(resp.items);
       setTotal(resp.total);
@@ -75,6 +77,7 @@ const App: React.FC = () => {
         item_type: itemType || undefined,
         limit: PAGE_SIZE,
         offset: papers.length,
+        search_fields: searchField || undefined,
       });
       setPapers((prev) => [...prev, ...resp.items]);
       setTotal(resp.total);
@@ -179,6 +182,8 @@ const App: React.FC = () => {
         itemType={itemType}
         onQueryChange={setQuery}
         onItemTypeChange={setItemType}
+        searchField={searchField}
+        onSearchFieldChange={setSearchField}
         onSubmit={runSearch}
         loading={listLoading}
       />
