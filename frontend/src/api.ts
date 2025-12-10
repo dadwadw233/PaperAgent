@@ -23,7 +23,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export async function fetchPapers(
   settings: Settings,
-  params: { q?: string; item_type?: string; limit?: number; offset?: number },
+  params: { q?: string; item_type?: string; search_fields?: string; limit?: number; offset?: number },
 ): Promise<PaperListResponse> {
   const url = buildUrl(settings.apiBase, "/papers", params);
   return fetchJson<PaperListResponse>(url);
