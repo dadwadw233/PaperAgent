@@ -6,10 +6,11 @@ from chromadb import Client
 from chromadb.config import Settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, get_session
 from backend.app.routers.config import read_config
+from backend.app.models import Chunk
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -19,6 +20,7 @@ class ChatRequest(BaseModel):
     query: str
     paper_id: Optional[int] = None
     top_k: int = 4
+    use_embeddings: bool = False
 
 
 def get_db_session():
@@ -50,6 +52,39 @@ def embed_texts(texts: List[str], cfg: Dict[str, str]) -> List[List[float]]:
     return [item["embedding"] for item in data["data"]]
 
 
+def build_context_from_chunks(
+    session: Session,
+    paper_id: int,
+    max_chars: int = 4000,
+    max_chunks: int = 10,
+) -> List[Dict[str, Optional[str]]]:
+    stmt = (
+        select(Chunk)
+        .where(Chunk.paper_id == paper_id)
+        .order_by(Chunk.seq)
+        .limit(max_chunks * 2)
+    )
+    rows: List[Chunk] = session.exec(stmt).all()
+    contexts: List[Dict[str, Optional[str]]] = []
+    total_chars = 0
+    for row in rows:
+        if total_chars >= max_chars or len(contexts) >= max_chunks:
+            break
+        if not row.content:
+            continue
+        contexts.append(
+            {
+                "paper_id": row.paper_id,
+                "chunk_id": row.id,
+                "seq": row.seq,
+                "score": None,
+                "text": row.content,
+            }
+        )
+        total_chars += len(row.content)
+    return contexts
+
+
 def call_chat(model_cfg: Dict[str, str], system_prompt: str, user_prompt: str) -> str:
     base_url = model_cfg.get("LLM_BASE_URL") or ""
     model = model_cfg.get("LLM_MODEL") or ""
@@ -79,37 +114,47 @@ def call_chat(model_cfg: Dict[str, str], system_prompt: str, user_prompt: str) -
 @router.post("")
 def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     cfg = read_config(session)
-    embed_cfg = ensure_embedding_cfg(cfg)
-    persist_dir = cfg.get("CHROMA_PERSIST_DIR") or "./chroma_store"
-    collection_name = cfg.get("CHROMA_COLLECTION") or "paper_chunks"
-
-    client = get_chroma_client(persist_dir)
-    collection = client.get_or_create_collection(collection_name)
-
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query is empty")
-    query_vec = embed_texts([req.query], embed_cfg)[0]
+    contexts: List[Dict] = []
+    source_collection = None
+    persist_dir = None
+    if req.use_embeddings:
+        embed_cfg = ensure_embedding_cfg(cfg)
+        persist_dir = cfg.get("CHROMA_PERSIST_DIR") or "./chroma_store"
+        collection_name = cfg.get("CHROMA_COLLECTION") or "paper_chunks"
+        source_collection = collection_name
+        client = get_chroma_client(persist_dir)
+        collection = client.get_or_create_collection(collection_name)
+        query_vec = embed_texts([req.query], embed_cfg)[0]
+        where = {"paper_id": req.paper_id} if req.paper_id else None
+        result = collection.query(
+            query_embeddings=[query_vec],
+            n_results=max(1, min(req.top_k, 10)),
+            where=where,
+        )
+        docs = result.get("documents", [[]])[0] if result else []
+        metas = result.get("metadatas", [[]])[0] if result else []
+        distances = result.get("distances", [[]])[0] if result else []
 
-    where = {"paper_id": req.paper_id} if req.paper_id else None
-    result = collection.query(
-        query_embeddings=[query_vec],
-        n_results=max(1, min(req.top_k, 10)),
-        where=where,
-    )
-    docs = result.get("documents", [[]])[0] if result else []
-    metas = result.get("metadatas", [[]])[0] if result else []
-    distances = result.get("distances", [[]])[0] if result else []
-
-    contexts = []
-    for doc, meta, dist in zip(docs, metas, distances):
-        contexts.append(
-            {
-                "paper_id": meta.get("paper_id"),
-                "chunk_id": meta.get("chunk_id"),
-                "seq": meta.get("seq"),
-                "score": dist,
-                "text": doc,
-            }
+        for doc, meta, dist in zip(docs, metas, distances):
+            contexts.append(
+                {
+                    "paper_id": meta.get("paper_id"),
+                    "chunk_id": meta.get("chunk_id"),
+                    "seq": meta.get("seq"),
+                    "score": dist,
+                    "text": doc,
+                }
+            )
+    else:
+        if not req.paper_id:
+            raise HTTPException(status_code=400, detail="paper_id is required when use_embeddings is false")
+        contexts = build_context_from_chunks(
+            session,
+            paper_id=req.paper_id,
+            max_chars=4000,
+            max_chunks=max(1, min(req.top_k, 10)),
         )
 
     context_text = "\n\n".join(
@@ -125,4 +170,9 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     user_prompt = f"User question: {req.query}\n\nContext:\n{context_text}"
 
     answer = call_chat(cfg, system_prompt, user_prompt)
-    return {"answer": answer, "contexts": contexts, "source_collection": collection_name, "persist_dir": persist_dir}
+    return {
+        "answer": answer,
+        "contexts": contexts,
+        "source_collection": source_collection,
+        "persist_dir": persist_dir,
+    }
