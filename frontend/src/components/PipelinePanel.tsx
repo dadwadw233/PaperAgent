@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   dedupeAttachments,
   fetchPipelineStats,
@@ -42,6 +42,8 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     current_paper_title?: string;
   }>({});
   const [summError, setSummError] = useState<string | null>(null);
+  const [summTargetTotal, setSummTargetTotal] = useState<number | null>(null);
+  const summTargetRef = useRef<number | null>(null);
   const [stats, setStats] = useState<null | {
     pdf_count: number;
     papers_with_pdf: number;
@@ -69,6 +71,26 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     if (!total) return 0;
     return Math.min(100, Math.round((done / total) * 100));
   }, [summProgress]);
+
+  const resolveSummaryTarget = useCallback(
+    async (limitValue?: number | null) => {
+      if (limitValue && limitValue > 0) {
+        return limitValue;
+      }
+      try {
+        const remoteStats = await fetchPipelineStats(settings);
+        setStats(remoteStats);
+        return remoteStats.missing_summary || null;
+      } catch (err) {
+        console.warn("Failed to resolve summary target", err);
+        if (stats && typeof stats.missing_summary === "number") {
+          return stats.missing_summary || null;
+        }
+        return null;
+      }
+    },
+    [stats, settings],
+  );
 
   const run = async () => {
     setLoading(true);
@@ -129,29 +151,50 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     try {
       const status = await getSummarizeStatus(settings, jid);
       setSummLog(status.log || "");
-      if (status.stats) {
-        setSummProgress({
-          processed: status.stats.processed_papers ?? status.stats.processed ?? 0,
-          total: status.stats.total_papers || status.stats.papers_with_pdf || 0,
-          errors: status.stats.errors ?? 0,
-          current_paper_title: status.stats.current_paper_title,
-        });
-      }
+      const statsPayload = status.stats || {};
+      const processedCount = statsPayload.processed_papers ?? statsPayload.processed ?? 0;
+      const backendTotal = statsPayload.total_papers || statsPayload.papers_with_pdf || 0;
+      const targetTotal =
+        summTargetRef.current ??
+        summTargetTotal ??
+        (backendTotal || null) ??
+        (processedCount || null);
+      setSummProgress({
+        processed: processedCount,
+        total: targetTotal || backendTotal || processedCount || 0,
+        errors: statsPayload.errors ?? 0,
+        current_paper_title: statsPayload.current_paper_title,
+      });
       setSummRunning(status.running);
       const message =
         status.last_message ||
-        (status.running ? "运行中…" : `完成（code=${status.returncode ?? 0}）`);
+        (status.running
+          ? "运行中…"
+          : `完成（已生成 ${processedCount}/${targetTotal || backendTotal || processedCount}）`);
       setSummStatus(message);
       if (!status.running) {
+        setSummJobId(null);
+        if (!summTargetRef.current && !summTargetTotal && processedCount > 0) {
+          setSummTargetTotal(processedCount);
+          summTargetRef.current = processedCount;
+          setSummProgress((prev) => ({
+            ...prev,
+            total: processedCount,
+          }));
+        }
         if (!summaryFinishedNotified) {
           onSummaryFinished?.();
           setSummaryFinishedNotified(true);
         }
+        fetchPipelineStats(settings)
+          .then((data) => setStats(data))
+          .catch((err) => console.warn("Failed to refresh stats after summarize", err));
         if (status.returncode && status.returncode !== 0) {
           setSummError(`程序退出：code=${status.returncode}`);
         } else {
           setSummError(null);
         }
+        setSummRunning(false);
       }
       if (status.running) {
         setTimeout(() => pollSummarize(jid), 2000);
@@ -256,9 +299,18 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 setSummProgress({});
                 setSummError(null);
                 setSummaryFinishedNotified(false);
+                const limitValue = summLimit ? Number(summLimit) : undefined;
+                if (limitValue) {
+                  setSummTargetTotal(limitValue);
+                  summTargetRef.current = limitValue;
+                } else {
+                  setSummTargetTotal(null);
+                  summTargetRef.current = null;
+                }
+                const targetPromise = resolveSummaryTarget(limitValue);
                 try {
                   const resp = await triggerSummarize(settings, {
-                    limit: summLimit ? Number(summLimit) : undefined,
+                    limit: limitValue,
                     chunk_chars: 4000,
                     skip_existing: true,
                     dry_run: summDryRun,
@@ -267,6 +319,18 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                   setSummRunning(true);
                   setSummStatus(`已启动 job ${resp.job_id}`);
                   pollSummarize(resp.job_id);
+                  targetPromise
+                    .then((value) => {
+                      setSummTargetTotal(value);
+                      summTargetRef.current = value ?? null;
+                      setSummProgress((prev) => ({
+                        ...prev,
+                        total: value || prev.total || 0,
+                      }));
+                    })
+                    .catch((err) => {
+                      console.warn("Failed to fetch summary target", err);
+                    });
                 } catch (err) {
                   setSummStatus(err instanceof Error ? err.message : "触发失败");
                 }
@@ -275,8 +339,15 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               触发AI摘要/标签
             </button>
           </div>
-          <div className="stack-row" style={{ gap: 12 }}>
-            {summStatus && <span className="muted summary-status">{summStatus}</span>}
+          <div className="stack-row" style={{ gap: 12, flexWrap: "wrap" }}>
+            {summStatus && (
+              <span className="pill" style={{ background: summRunning ? "#1f2937" : "#334155" }}>
+                {summStatus}
+              </span>
+            )}
+            {summTargetTotal && (
+              <span className="muted">本次计划处理 {summTargetTotal} 篇</span>
+            )}
             {summError && <span className="pill warn">{summError}</span>}
           </div>
           {summProgress.total ? (
@@ -285,7 +356,9 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 <div className="progress-fill" style={{ width: `${summPercent}%` }} />
               </div>
               <div className="summary-progress-meta">
-                <span>已生成 {summProgress.processed ?? 0}/{summProgress.total}</span>
+                <span>
+                  已生成 {summProgress.processed ?? 0}/{summProgress.total}
+                </span>
                 <span>错误 {summProgress.errors ?? 0}</span>
               </div>
             </>
