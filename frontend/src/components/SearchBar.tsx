@@ -53,15 +53,16 @@ export const SearchBar: React.FC<Props> = ({
         className="select-input"
         value={searchField}
         onChange={(e) => onSearchFieldChange(e.target.value)}
-        title="选择检索字段"
+        title="Search fields"
       >
-        <option value="title_abstract">标题+摘要</option>
-        <option value="title">仅标题</option>
-        <option value="abstract">仅摘要</option>
-        <option value="summary_long">AI 摘要（长）</option>
-        <option value="summary_one_liner">AI 摘要（一句话）</option>
-        <option value="summary_snarky">AI 摘要（吐槽）</option>
-        <option value="summary">AI 摘要（全部）</option>
+        <option value="title_abstract">Title + Abstract</option>
+        <option value="title">Title only</option>
+        <option value="abstract">Abstract only</option>
+        <option value="authors">Authors</option>
+        <option value="summary_long">AI Summary (Long)</option>
+        <option value="summary_one_liner">AI Summary (One-liner)</option>
+        <option value="summary_snarky">AI Summary (Snarky)</option>
+        <option value="summary">AI Summary (All)</option>
       </select>
       <button className="primary-btn" onClick={onSubmit} disabled={loading}>
         {loading ? "Searching..." : "Search"}
