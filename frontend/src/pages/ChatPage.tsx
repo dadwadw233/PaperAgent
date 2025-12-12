@@ -15,18 +15,30 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
-  const LIMIT = 100;
+  const LIMIT = 50;
 
   useEffect(() => {
-    loadInitialPapers();
+    loadPapers(true);
   }, [settings.apiBase]);
 
-  const loadInitialPapers = async () => {
+  const loadPapers = async (reset = false, query = "") => {
     setLoading(true);
     try {
-      const resp = await fetchPapers(settings, { limit: LIMIT, offset: 0 });
-      setPapers(resp.items);
-      setOffset(LIMIT);
+      const currentOffset = reset ? 0 : offset;
+      const resp = await fetchPapers(settings, { 
+        q: query || undefined,
+        search_fields: "title,abstract,authors",
+        limit: LIMIT, 
+        offset: currentOffset 
+      });
+      
+      if (reset) {
+        setPapers(resp.items);
+        setOffset(LIMIT);
+      } else {
+        setPapers(prev => [...prev, ...resp.items]);
+        setOffset(prev => prev + LIMIT);
+      }
       setHasMore(resp.items.length === LIMIT);
     } catch (err) {
       console.error("Failed to load papers:", err);
@@ -35,19 +47,22 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     }
   };
 
-  const loadMorePapers = async () => {
+  const handleSearch = () => {
+    loadPapers(true, searchQuery);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    // Real-time search after 300ms delay
+    const timeoutId = setTimeout(() => {
+      loadPapers(true, value);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  };
+
+  const loadMorePapers = () => {
     if (loading || !hasMore) return;
-    setLoading(true);
-    try {
-      const resp = await fetchPapers(settings, { limit: LIMIT, offset });
-      setPapers(prev => [...prev, ...resp.items]);
-      setOffset(prev => prev + LIMIT);
-      setHasMore(resp.items.length === LIMIT);
-    } catch (err) {
-      console.error("Failed to load more papers:", err);
-    } finally {
-      setLoading(false);
-    }
+    loadPapers(false, searchQuery);
   };
 
   const handleScroll = useCallback(() => {
@@ -56,7 +71,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     if (scrollHeight - scrollTop - clientHeight < 100 && hasMore && !loading) {
       loadMorePapers();
     }
-  }, [hasMore, loading, offset]);
+  }, [hasMore, loading, offset, searchQuery]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -66,14 +81,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     }
   }, [handleScroll]);
 
-  // Case-insensitive search in title
-  const filteredPapers = papers.filter((p) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    const title = (p.title || "").toLowerCase();
-    return title.includes(query);
-  });
-
   const selectedPaper = selectedPaperId ? papers.find((p) => p.id === selectedPaperId) : null;
 
   return (
@@ -82,7 +89,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
         <div>
           <h1 className="page-title">Chat with Papers</h1>
           <p className="page-subtitle">
-            {searchQuery ? `${filteredPapers.length} papers found` : `${papers.length} papers loaded`}
+            {searchQuery ? `${papers.length} papers found` : `${papers.length} papers loaded`}
           </p>
         </div>
       </div>
@@ -102,12 +109,25 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
               <input
                 type="text"
                 className="search-box"
-                placeholder="Search by title..."
+                placeholder="Search by title, authors, abstract..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setSearchQuery(newValue);
+                  handleSearchChange(newValue);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSearch();
+                  }
+                }}
               />
               {searchQuery && (
-                <button className="clear-btn" onClick={() => setSearchQuery("")}>
+                <button className="clear-btn" onClick={() => {
+                  setSearchQuery("");
+                  loadPapers(true, "");
+                }}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
@@ -126,14 +146,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
             )}
 
             <div className="paper-select-list" ref={listRef}>
-              {loading && papers.length === 0 && <div className="empty">Loading papers...</div>}
-              {!loading && filteredPapers.length === 0 && searchQuery && (
+              {loading && papers.length === 0 && <div className="empty">Searching...</div>}
+              {!loading && papers.length === 0 && searchQuery && (
                 <div className="empty">No papers found matching "{searchQuery}"</div>
               )}
               {!loading && papers.length === 0 && !searchQuery && (
                 <div className="empty">No papers available</div>
               )}
-              {filteredPapers.map((paper, idx) => (
+              {papers.map((paper, idx) => (
                 <div
                   key={paper.id}
                   className={`card compact ${selectedPaperId === paper.id ? "active" : ""}`}

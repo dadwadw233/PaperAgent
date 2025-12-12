@@ -15,6 +15,7 @@ SUMMARY_FIELD_KEYS = {"summary_long", "summary_one_liner", "summary_snarky"}
 FIELD_COLUMN_MAP = {
     "title": Paper.title,
     "abstract": Paper.abstract,
+    "authors": Paper.authors,
     "summary_long": Summary.long_summary,
     "summary_one_liner": Summary.one_liner,
     "summary_snarky": Summary.snarky_comment,
@@ -48,7 +49,7 @@ def list_papers(
     item_type: Optional[str] = Query(default=None),
     search_fields: Optional[str] = Query(
         default=None,
-        description="指定检索字段（逗号分隔），可选：title, abstract, title_abstract, summary, summary_long, summary_one_liner, summary_snarky",
+        description="指定检索字段（逗号分隔），可选：title, abstract, authors, title_abstract, summary, summary_long, summary_one_liner, summary_snarky",
     ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
