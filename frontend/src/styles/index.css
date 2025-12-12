@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  /* 更专业的配色 - 使用深蓝灰色调 */
+  /* Professional color scheme inspired by GitHub and Linear */
   --bg: #0d1117;
   --bg-secondary: #161b22;
   --panel: #1c2128;
@@ -12,18 +12,21 @@
   --muted: #768390;
   --text: #adbac7;
   --text-primary: #cdd9e5;
-  /* 使用单一的蓝色作为强调色 */
+  /* Primary accent color */
   --accent: #539bf5;
   --accent-hover: #6cb6ff;
   --accent-muted: rgba(83, 155, 245, 0.15);
+  /* Status colors */
   --danger: #f47067;
   --danger-muted: rgba(244, 112, 103, 0.15);
   --success: #57ab5a;
   --success-muted: rgba(87, 171, 90, 0.15);
   --warning: #c69026;
   --warning-muted: rgba(198, 144, 38, 0.15);
-  --shadow: 0 0 transparent;
-  --transition: all 0.15s ease;
+  /* Subtle elevation */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px 0 rgba(0, 0, 0, 0.4);
+  --transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -218,21 +221,34 @@ textarea:focus {
   grid-template-columns: 340px 1fr;
   gap: 24px;
   height: calc(100vh - 200px);
+  align-items: stretch;
 }
 
 .chat-sidebar-section {
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-sidebar-section > .panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .chat-main-section {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .paper-select-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: calc(100vh - 380px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -267,6 +283,31 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.stat-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
 }
 
 .stat-label {
@@ -299,6 +340,13 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.action-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
 }
 
 .action-card-header {
@@ -364,6 +412,7 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 24px;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -422,11 +471,19 @@ textarea:focus {
   background: var(--accent);
   color: white;
   border: 1px solid var(--accent);
+  box-shadow: 0 1px 2px 0 rgba(83, 155, 245, 0.3);
 }
 
 .primary-btn:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+  box-shadow: 0 2px 4px 0 rgba(83, 155, 245, 0.4);
+  transform: translateY(-1px);
+}
+
+.primary-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(83, 155, 245, 0.3);
 }
 
 .ghost-btn {
@@ -464,16 +521,39 @@ textarea:focus {
   background: var(--card);
   cursor: pointer;
   transition: var(--transition);
+  position: relative;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  transition: var(--transition);
 }
 
 .card:hover {
   background: var(--card-hover);
   border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.card:hover::before {
+  background: var(--accent);
 }
 
 .card.active {
   border-color: var(--accent);
   background: var(--accent-muted);
+  box-shadow: var(--shadow-sm);
+}
+
+.card.active::before {
+  background: var(--accent);
 }
 
 .card.compact {
@@ -728,12 +808,39 @@ textarea:focus {
   height: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
+  position: relative;
 }
 
 .progress-fill {
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
   transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .summary-progress-meta {
@@ -787,23 +894,48 @@ textarea:focus {
 }
 
 /* File Upload */
-.file-upload-area {
-  border: 2px dashed var(--border);
-  border-radius: 6px;
-  padding: 24px;
-  text-align: center;
-  background: var(--card);
-  transition: var(--transition);
-  cursor: pointer;
+.file-upload-wrapper {
+  position: relative;
 }
 
-.file-upload-area:hover {
+.file-upload-wrapper input[type="file"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  user-select: none;
+}
+
+.file-upload-label:hover {
   border-color: var(--accent);
   background: var(--panel-hover);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
-.file-upload-area input[type="file"] {
-  display: none;
+.file-upload-label svg {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: var(--transition);
+}
+
+.file-upload-label:hover svg {
+  color: var(--accent);
 }
 
 /* Scrollbar */
