@@ -126,6 +126,9 @@ const App: React.FC = () => {
           llmBaseUrl: cfg.LLM_BASE_URL || prev.llmBaseUrl,
           llmModel: cfg.LLM_MODEL || prev.llmModel,
           llmApiKey: cfg.LLM_API_KEY || prev.llmApiKey,
+          embedBaseUrl: cfg.EMBED_BASE_URL || cfg.LLM_BASE_URL || prev.embedBaseUrl,
+          embedModel: cfg.EMBED_MODEL || prev.embedModel || cfg.LLM_MODEL || prev.llmModel,
+          embedApiKey: cfg.EMBED_API_KEY || cfg.LLM_API_KEY || prev.embedApiKey,
         }));
         setLastSynced(new Date().toLocaleTimeString());
         setConfigError(null);
@@ -144,9 +147,9 @@ const App: React.FC = () => {
         LLM_BASE_URL: settings.llmBaseUrl,
         LLM_MODEL: settings.llmModel,
         LLM_API_KEY: settings.llmApiKey,
-        EMBED_BASE_URL: settings.llmBaseUrl,
-        EMBED_MODEL: settings.llmModel,
-        EMBED_API_KEY: settings.llmApiKey,
+        EMBED_BASE_URL: settings.embedBaseUrl || settings.llmBaseUrl,
+        EMBED_MODEL: settings.embedModel || settings.llmModel,
+        EMBED_API_KEY: settings.embedApiKey || settings.llmApiKey,
       });
       setLastSynced(new Date().toLocaleTimeString());
     } catch (err) {

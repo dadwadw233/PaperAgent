@@ -1,11 +1,19 @@
 import json
+import os
 import threading
 import uuid
 from pathlib import Path
 from typing import Dict, Optional
+from sqlmodel import Session
 
 from backend.scripts.process_pdfs import ingest_pdfs
 from backend.scripts.summarize_papers import process_papers
+from backend.scripts.embed_chunks import (
+    get_embedding_endpoint_config,
+    embed_chunks as embed_chunks_fn,
+    fetch_chunks,
+)
+from backend.app.db import create_db_engine
 
 JOB_DIR = Path(".pipeline_jobs")
 JOB_DIR.mkdir(exist_ok=True)
@@ -29,6 +37,9 @@ class JobStatus:
             "current_paper_id": None,
             "current_paper_title": "",
             "current_pdf": None,
+            "embedded": 0,
+            "total_chunks": 0,
+            "missing_files": 0,
         }
         self.last_message: str = ""
         self._lock = threading.Lock()
@@ -79,6 +90,9 @@ class JobStatus:
                 "current_paper_id",
                 "current_paper_title",
                 "current_pdf",
+                "embedded",
+                "total_chunks",
+                "missing_files",
             ]:
                 if key in payload:
                     self.stats[key] = payload[key]
@@ -86,13 +100,16 @@ class JobStatus:
 
 jobs: Dict[str, JobStatus] = {}
 summarize_jobs: Dict[str, JobStatus] = {}
+embed_jobs: Dict[str, JobStatus] = {}
 
 
-def start_process_pdfs(chunk_size: int, overlap: int, limit: Optional[int]) -> str:
+def start_process_pdfs(chunk_size: int, overlap: int, limit: Optional[int], skip_existing: bool = True) -> str:
     job_id = str(uuid.uuid4())
     log_path = JOB_DIR / f"{job_id}.log"
     status = JobStatus()
     status.set_log(log_path)
+    stop_flag = threading.Event()
+    status.set_stop_event(stop_flag)
     jobs[job_id] = status
 
     def runner():
@@ -108,7 +125,14 @@ def start_process_pdfs(chunk_size: int, overlap: int, limit: Optional[int]) -> s
                 log_line(json.dumps(evt, ensure_ascii=False))
 
             try:
-                ingest_pdfs(limit_papers=limit, chunk_size=chunk_size, overlap=overlap, progress_cb=progress_cb)
+                ingest_pdfs(
+                    limit_papers=limit,
+                    chunk_size=chunk_size,
+                    overlap=overlap,
+                    progress_cb=progress_cb,
+                    stop_event=stop_flag,
+                    skip_existing=skip_existing,
+                )
                 status.stop(0)
             except Exception as exc:
                 log_line(f"error: {exc}")
@@ -197,3 +221,74 @@ def stop_summarize_job(job_id: str) -> Dict:
     status.signal_stop()
     status.stop(-1)
     return {"status": "stopped"}
+
+
+def stop_process_pdfs_job(job_id: str) -> Dict:
+    status = jobs.get(job_id)
+    if not status:
+        return {"error": "job not found"}
+    status.signal_stop()
+    status.stop(-1)
+    return {"status": "stopped"}
+
+
+def start_embed_job(limit_chunks: Optional[int], collection: str, persist_dir: str, batch_size: int) -> str:
+    job_id = str(uuid.uuid4())
+    log_path = JOB_DIR / f"{job_id}.log"
+    status = JobStatus()
+    status.set_log(log_path)
+    embed_jobs[job_id] = status
+
+    def runner():
+        with log_path.open("w", encoding="utf-8") as lf:
+            def log_line(msg: str):
+                safe = msg.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+                lf.write(safe + "\n")
+                lf.flush()
+
+            def progress_cb(evt: Dict):
+                status.update(evt)
+                log_line(json.dumps(evt, ensure_ascii=False))
+
+            try:
+                cfg = get_embedding_endpoint_config()
+                engine = create_db_engine()
+                with Session(engine) as session:
+                    chunks = fetch_chunks(session, limit=limit_chunks)
+                total = len(chunks)
+                status.update({"stage": "starting", "total_chunks": total, "embedded": 0})
+                if total == 0:
+                    status.stop(0)
+                    return
+                embed_chunks_fn(
+                    collection_name=collection,
+                    persist_dir=persist_dir,
+                    chunks=chunks,
+                    cfg=cfg,
+                    batch_size=batch_size,
+                    progress_cb=progress_cb,
+                )
+                status.stop(0)
+            except Exception as exc:
+                log_line(f"error: {exc}")
+                status.stop(1)
+            embed_jobs[job_id] = status
+
+    threading.Thread(target=runner, daemon=True).start()
+    return job_id
+
+
+def get_embed_status(job_id: str) -> Dict:
+    status = embed_jobs.get(job_id)
+    if not status:
+        return {"error": "job not found"}
+    log_content = ""
+    if status.log_path and status.log_path.exists():
+        log_content = status.log_path.read_text()
+    return {
+        "running": status.running,
+        "returncode": status.returncode,
+        "log": log_content,
+        "stats": status.stats,
+        "last_message": status.last_message,
+    }

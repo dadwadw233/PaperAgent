@@ -47,4 +47,7 @@ export interface Settings {
   llmBaseUrl: string;
   llmModel: string;
   llmApiKey: string;
+  embedBaseUrl: string;
+  embedModel: string;
+  embedApiKey: string;
 }

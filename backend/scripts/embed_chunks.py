@@ -31,6 +31,7 @@ def embed_chunks(
     chunks: List[Chunk],
     cfg: Dict[str, str],
     batch_size: int = 16,
+    progress_cb=None,
 ) -> int:
     client = get_chroma_client(persist_dir)
     collection = client.get_or_create_collection(collection_name)
@@ -46,7 +47,8 @@ def embed_chunks(
         # Expect OpenAI-style response: {"data": [{"embedding": [...]}]}
         return [item["embedding"] for item in data["data"]]
 
-    for start in range(0, len(chunks), batch_size):
+    total = len(chunks)
+    for start in range(0, total, batch_size):
         batch = chunks[start : start + batch_size]
         texts = [c.content for c in batch]
         embeddings = embed_texts(texts)
@@ -62,6 +64,16 @@ def embed_chunks(
         ]
         collection.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
         inserted += len(batch)
+        if progress_cb:
+            progress_cb(
+                {
+                    "stage": "embedding",
+                    "embedded": inserted,
+                    "total": total,
+                    "batch": len(batch),
+                    "last_chunk_id": batch[-1].id if batch else None,
+                }
+            )
     return inserted
 
 

@@ -58,6 +58,34 @@ export const SettingsPanel: React.FC<Props> = ({ settings, onChange, onSave, sav
           onChange={(e) => update("llmApiKey", e.target.value)}
         />
       </div>
+      <div className="settings-row">
+        <label htmlFor="embedBase">Embedding Base URL (fallback to LLM if empty)</label>
+        <input
+          id="embedBase"
+          placeholder="https://your-endpoint/v1"
+          value={settings.embedBaseUrl}
+          onChange={(e) => update("embedBaseUrl", e.target.value)}
+        />
+      </div>
+      <div className="settings-row">
+        <label htmlFor="embedModel">Embedding Model Name</label>
+        <input
+          id="embedModel"
+          placeholder="text-embedding-3-large"
+          value={settings.embedModel}
+          onChange={(e) => update("embedModel", e.target.value)}
+        />
+      </div>
+      <div className="settings-row">
+        <label htmlFor="embedKey">Embedding API Key</label>
+        <input
+          id="embedKey"
+          type="password"
+          placeholder="sk-..."
+          value={settings.embedApiKey}
+          onChange={(e) => update("embedApiKey", e.target.value)}
+        />
+      </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <button className="primary-btn" onClick={onSave} disabled={saving}>
           {saving ? "Saving…" : "Save to backend"}

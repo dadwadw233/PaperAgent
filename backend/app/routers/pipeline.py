@@ -14,9 +14,11 @@ from backend.app.services.pipeline import (
     start_summarize_job,
     get_summarize_status,
     stop_summarize_job,
+    start_embed_job,
+    get_embed_status,
+    stop_process_pdfs_job,
 )
 from backend.scripts.dedupe_attachments import dedupe as dedupe_attachments
-from backend.scripts.embed_chunks import main as embed_chunks_main
 from backend.scripts.summarize_papers import process_papers as summarize_papers
 from backend.app.routers.config import read_config
 
@@ -27,12 +29,13 @@ class ProcessPdfsRequest(BaseModel):
     chunk_size: int = 1200
     overlap: int = 200
     limit: Optional[int] = None
+    skip_existing: bool = True
 
 
 @router.post("/process_pdfs/start")
 def process_pdfs_start(req: ProcessPdfsRequest):
     try:
-        job_id = start_process_pdfs(req.chunk_size, req.overlap, req.limit)
+        job_id = start_process_pdfs(req.chunk_size, req.overlap, req.limit, skip_existing=req.skip_existing)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to start process_pdfs: {exc}")
     return {"job_id": job_id}
@@ -46,21 +49,18 @@ def process_pdfs_status(job_id: str = Query(..., description="Job ID from /start
     return status
 
 
+@router.post("/process_pdfs/stop")
+def process_pdfs_stop(job_id: str):
+    status = stop_process_pdfs_job(job_id)
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+    return status
+
+
 @router.post("/dedupe_attachments")
 def dedupe_attachments_endpoint():
     result = dedupe_attachments()
     return {"status": "ok", "result": result}
-
-
-@router.post("/embed_chunks")
-def embed_chunks_endpoint():
-    # Run with env-configured EMBED_* or LLM_* variables
-    try:
-        embed_chunks_main()
-    except SystemExit:
-        # embed_chunks_main may call sys.exit; ignore to return a response
-        pass
-    return {"status": "started", "note": "Check logs for details"}
 
 
 class SummarizeRequest(BaseModel):
@@ -68,6 +68,47 @@ class SummarizeRequest(BaseModel):
     chunk_chars: int = 4000
     skip_existing: bool = True
     dry_run: bool = False
+
+
+class EmbedRequest(BaseModel):
+    limit_chunks: Optional[int] = None
+    collection: str = "paper_chunks"
+    persist_dir: str = "./chroma_store"
+    batch_size: int = 16
+    embed_base_url: Optional[str] = None
+    embed_model: Optional[str] = None
+    embed_api_key: Optional[str] = None
+
+
+@router.post("/embed_chunks/start")
+def embed_chunks_start(req: EmbedRequest):
+    engine = create_db_engine()
+    with get_session(engine) as session:
+        cfg = read_config(session)
+    for key, override in [
+        ("EMBED_BASE_URL", req.embed_base_url),
+        ("EMBED_MODEL", req.embed_model),
+        ("EMBED_API_KEY", req.embed_api_key),
+    ]:
+        if override:
+            os.environ[key] = override
+        elif cfg.get(key):
+            os.environ[key] = cfg[key]
+    job_id = start_embed_job(
+        limit_chunks=req.limit_chunks,
+        collection=req.collection,
+        persist_dir=req.persist_dir,
+        batch_size=req.batch_size,
+    )
+    return {"job_id": job_id}
+
+
+@router.get("/embed_chunks/status")
+def embed_chunks_status(job_id: str = Query(...)):
+    status = get_embed_status(job_id)
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+    return status
 
 
 @router.post("/summarize/start")

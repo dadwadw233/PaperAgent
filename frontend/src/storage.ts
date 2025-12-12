@@ -21,6 +21,9 @@ export const defaultSettings: Settings = {
   llmBaseUrl: "",
   llmModel: "gpt-3.5-turbo",
   llmApiKey: "",
+  embedBaseUrl: "",
+  embedModel: "",
+  embedApiKey: "",
 };
 
 export function loadSettings(): Settings {

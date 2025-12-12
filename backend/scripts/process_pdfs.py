@@ -56,14 +56,19 @@ def process_pdf_for_paper(
     chunk_size: int,
     overlap: int,
     start_seq: int = 0,
+    stop_event=None,
 ) -> Tuple[int, int]:
     inserted = 0
     skipped = 0
     carry = ""
     seq = start_seq
     for page_text in extract_pdf_pages(pdf_path):
+        if stop_event and stop_event.is_set():
+            break
         new_chunks, carry = chunk_streaming(page_text, chunk_size=chunk_size, overlap=overlap, carry=carry)
         for chunk in new_chunks:
+            if stop_event and stop_event.is_set():
+                break
             chunk_hash = hash_chunk(paper.id, str(pdf_path), seq, chunk)
             exists = session.exec(select(Chunk).where(Chunk.hash == chunk_hash)).first()
             if exists:
@@ -106,6 +111,8 @@ def ingest_pdfs(
     chunk_size: int,
     overlap: int,
     progress_cb: Optional[Callable[[Dict], None]] = None,
+    skip_existing: bool = True,
+    stop_event=None,
 ):
     engine = create_db_engine()
     init_db(engine)
@@ -119,6 +126,7 @@ def ingest_pdfs(
         paper_pdf_list = []
         total_pdfs = 0
         total_papers_with_pdf = 0
+        total_skipped_existing = 0
         for paper in papers:
             attachments = session.exec(
                 select(FileAttachment).where(FileAttachment.paper_id == paper.id)
@@ -130,15 +138,35 @@ def ingest_pdfs(
             ]
             if not pdf_paths:
                 continue
-            paper_pdf_list.append((paper, pdf_paths))
-            total_pdfs += len(pdf_paths)
+            valid_paths = []
+            for p in pdf_paths:
+                if skip_existing:
+                    exists_chunk = session.exec(
+                        select(Chunk.id).where(
+                            Chunk.paper_id == paper.id,
+                            Chunk.source_path == str(p),
+                        )
+                    ).first()
+                    if exists_chunk:
+                        total_skipped_existing += 1
+                        continue
+                valid_paths.append(p)
+            if not valid_paths:
+                continue
+            paper_pdf_list.append((paper, valid_paths))
+            total_pdfs += len(valid_paths)
             total_papers_with_pdf += 1
 
         total_inserted = 0
         total_skipped = 0
         processed_pdfs = 0
+        missing_files = 0
 
         for paper, pdf_paths in paper_pdf_list:
+            if stop_event and stop_event.is_set():
+                if progress_cb:
+                    progress_cb({"stage": "stopped", "processed_pdfs": processed_pdfs, "total_pdfs": total_pdfs})
+                break
             if progress_cb:
                 progress_cb(
                     {
@@ -153,8 +181,12 @@ def ingest_pdfs(
                     }
                 )
             for pdf_path in pdf_paths:
+                if stop_event and stop_event.is_set():
+                    break
                 if not pdf_path.exists():
                     print(f"[WARN] File not found: {pdf_path}")
+                    missing_files += 1
+                    processed_pdfs += 1
                     if progress_cb:
                         progress_cb(
                             {
@@ -162,6 +194,7 @@ def ingest_pdfs(
                                 "path": str(pdf_path),
                                 "processed_pdfs": processed_pdfs,
                                 "total_pdfs": total_pdfs,
+                                "missing_files": missing_files,
                             }
                         )
                     continue
@@ -175,7 +208,7 @@ def ingest_pdfs(
                         }
                     )
                 inserted, skipped = process_pdf_for_paper(
-                    session, paper, pdf_path, chunk_size, overlap
+                    session, paper, pdf_path, chunk_size, overlap, stop_event=stop_event
                 )
                 total_inserted += inserted
                 total_skipped += skipped
@@ -189,6 +222,7 @@ def ingest_pdfs(
                             "total_pdfs": total_pdfs,
                             "chunks_inserted": total_inserted,
                             "chunks_skipped": total_skipped,
+                            "missing_files": missing_files,
                         }
                     )
             session.commit()
@@ -201,11 +235,12 @@ def ingest_pdfs(
                         "chunks_skipped": total_skipped,
                         "processed_pdfs": processed_pdfs,
                         "total_pdfs": total_pdfs,
+                        "missing_files": missing_files,
                     }
                 )
 
     print(
-        f"PDF processing done. papers_with_pdf={total_papers_with_pdf}, chunks_inserted={total_inserted}, skipped_existing={total_skipped}"
+        f"PDF processing done. papers_with_pdf={total_papers_with_pdf}, chunks_inserted={total_inserted}, skipped_existing_chunks={total_skipped}, skipped_files_existing={total_skipped_existing}"
     )
     if progress_cb:
         progress_cb(
@@ -216,6 +251,8 @@ def ingest_pdfs(
                 "chunks_skipped": total_skipped,
                 "total_pdfs": total_pdfs,
                 "processed_pdfs": processed_pdfs,
+                "skipped_existing_files": total_skipped_existing,
+                "missing_files": missing_files,
             }
         )
 
