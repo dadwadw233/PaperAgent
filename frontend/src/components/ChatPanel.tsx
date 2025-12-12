@@ -17,6 +17,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [useEmbeddings, setUseEmbeddings] = useState(false);
   const disabled = !paper;
 
   const send = async () => {
@@ -32,6 +33,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
         query: prompt,
         paper_id: paper?.id,
         top_k: 4,
+        use_embeddings: useEmbeddings,
       });
       const ctxSummary = resp.contexts
         ?.map((c: any, idx: number) => `[${idx + 1}] paper ${c.paper_id} seq ${c.seq}`)
@@ -53,6 +55,20 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
         <div className="pill">Chat</div>
         {!paper && <div className="pill warn">Select a paper first</div>}
         {loading && <div className="pill">Thinking…</div>}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={useEmbeddings}
+            onChange={(e) => setUseEmbeddings(e.target.checked)}
+            disabled={disabled || loading}
+          />
+          <span className="muted">使用向量检索</span>
+        </label>
+        <span className="muted" style={{ fontSize: 12 }}>
+          勾选后按相似度召回 chunk（需已运行嵌入）
+        </span>
       </div>
       <div className="chat-messages">
         {messages.map((m, idx) => (
