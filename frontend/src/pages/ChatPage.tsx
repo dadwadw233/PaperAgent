@@ -53,11 +53,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
             
             <input
               type="text"
-              className="search-input"
+              className="search-input compact"
               placeholder="Search papers..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ marginBottom: 12 }}
             />
 
             {selectedPaperId && (

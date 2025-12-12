@@ -44,6 +44,60 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+      circle at 20% 50%,
+      rgba(83, 155, 245, 0.08) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 80% 80%,
+      rgba(139, 92, 246, 0.06) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 40% 20%,
+      rgba(34, 211, 238, 0.04) 0%,
+      transparent 50%
+    );
+  animation: gradient-shift 20s ease infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(90deg, rgba(83, 155, 245, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(83, 155, 245, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  opacity: 0.5;
+  z-index: 0;
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.1);
+  }
 }
 
 a {
@@ -91,6 +145,8 @@ textarea:focus {
   display: flex;
   min-height: 100vh;
   background: var(--bg);
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar {
@@ -100,11 +156,47 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   padding: 0;
+  position: relative;
+  backdrop-filter: blur(10px);
+}
+
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent),
+    transparent
+  );
+  opacity: 0.5;
 }
 
 .sidebar-header {
   padding: 24px 20px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar-header::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(83, 155, 245, 0.1),
+    transparent
+  );
+  animation: shimmer 3s infinite;
 }
 
 .logo {
@@ -114,8 +206,12 @@ textarea:focus {
 .app-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--accent), var(--text-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: -0.02em;
+  position: relative;
 }
 
 .nav {
@@ -170,6 +266,7 @@ textarea:focus {
   max-width: 1600px;
   margin: 0 auto;
   width: 100%;
+  animation: slideUp 0.5s ease-out;
 }
 
 /* Page Layout */
@@ -190,9 +287,13 @@ textarea:focus {
 .page-title {
   font-size: 28px;
   font-weight: 600;
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--text-primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: -0.02em;
   margin-bottom: 6px;
+  animation: slideDown 0.4s ease-out;
 }
 
 .page-subtitle {
@@ -270,6 +371,17 @@ textarea:focus {
   margin-bottom: 4px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.management-section-title::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
 }
 
 .stats-grid {
@@ -322,7 +434,10 @@ textarea:focus {
 .stat-value {
   font-size: 28px;
   font-weight: 600;
-  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--accent), var(--text-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   font-variant-numeric: tabular-nums;
 }
 
@@ -413,6 +528,25 @@ textarea:focus {
   border-radius: 8px;
   padding: 24px;
   box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  animation: scaleIn 0.3s ease-out;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent),
+    transparent
+  );
+  opacity: 0.3;
 }
 
 .panel-header {
@@ -443,6 +577,17 @@ textarea:focus {
   border-radius: 6px;
   font-size: 14px;
   background: var(--panel);
+  transition: var(--transition);
+}
+
+.search-input:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(83, 155, 245, 0.2);
+}
+
+.search-input.compact {
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .select-input {
@@ -513,6 +658,17 @@ textarea:focus {
   gap: 8px;
   padding-right: 4px;
 }
+
+.list > * {
+  animation: slideUp 0.3s ease-out backwards;
+}
+
+.list > *:nth-child(1) { animation-delay: 0.05s; }
+.list > *:nth-child(2) { animation-delay: 0.1s; }
+.list > *:nth-child(3) { animation-delay: 0.15s; }
+.list > *:nth-child(4) { animation-delay: 0.2s; }
+.list > *:nth-child(5) { animation-delay: 0.25s; }
+.list > *:nth-child(n+6) { animation-delay: 0.3s; }
 
 .card {
   border: 1px solid var(--border);
@@ -714,6 +870,29 @@ textarea:focus {
   line-height: 1.6;
   font-size: 14px;
   color: var(--text);
+  animation: slideUp 0.3s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-row .bubble::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(83, 155, 245, 0.1),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.chat-row:hover .bubble::before {
+  left: 100%;
 }
 
 .chat-row .bubble.error {
@@ -840,6 +1019,39 @@ textarea:focus {
   }
   100% {
     transform: translateX(100%);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
