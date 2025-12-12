@@ -66,9 +66,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     }
   }, [handleScroll]);
 
-  const filteredPapers = papers.filter((p) =>
-    searchQuery ? p.title?.toLowerCase().includes(searchQuery.toLowerCase()) : true
-  );
+  // Case-insensitive search in title
+  const filteredPapers = papers.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const title = (p.title || "").toLowerCase();
+    return title.includes(query);
+  });
 
   const selectedPaper = selectedPaperId ? papers.find((p) => p.id === selectedPaperId) : null;
 
@@ -123,8 +127,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
 
             <div className="paper-select-list" ref={listRef}>
               {loading && papers.length === 0 && <div className="empty">Loading papers...</div>}
-              {!loading && filteredPapers.length === 0 && (
-                <div className="empty">No papers found</div>
+              {!loading && filteredPapers.length === 0 && searchQuery && (
+                <div className="empty">No papers found matching "{searchQuery}"</div>
+              )}
+              {!loading && papers.length === 0 && !searchQuery && (
+                <div className="empty">No papers available</div>
               )}
               {filteredPapers.map((paper, idx) => (
                 <div

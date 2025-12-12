@@ -88,6 +88,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
 
   useEffect(() => {
     runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.apiBase]);
 
   useEffect(() => {
