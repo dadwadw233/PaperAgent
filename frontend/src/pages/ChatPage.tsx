@@ -94,21 +94,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
         </div>
 
         <div className="chat-main-section">
-          <div className="panel" style={{ height: "100%" }}>
-            <ChatPanel
-              paper={selectedPaper ? {
-                ...selectedPaper,
-                authors: null,
-                abstract: null,
-                manual_tags: null,
-                automatic_tags: null,
-                summary: null,
-                tags: [],
-                attachments: []
-              } : null}
-              settings={settings}
-            />
-          </div>
+          <ChatPanel
+            paper={selectedPaper ? {
+              ...selectedPaper,
+              authors: null,
+              abstract: null,
+              manual_tags: null,
+              automatic_tags: null,
+              summary: null,
+              tags: [],
+              attachments: []
+            } : null}
+            settings={settings}
+          />
         </div>
       </div>
     </div>

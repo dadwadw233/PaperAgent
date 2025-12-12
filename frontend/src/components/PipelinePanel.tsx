@@ -19,37 +19,41 @@ interface Props {
   onSummaryFinished?: () => void;
 }
 
-type EmbedJobInfo = {
-  job_id: string;
-  running: boolean;
-  returncode?: number | null;
-  stats?: any;
-  last_message?: string;
+type PipelineStats = {
+  pdf_count: number;
+  papers_with_pdf: number;
+  papers_with_chunks: number;
+  missing_papers: number;
+  missing_pdfs: number;
+  sample_missing: any[];
+  summary_rows: number;
+  papers_with_summary: number;
+  missing_summary: number;
+  chunks_total?: number;
+  embed_estimate?: { persist_dir: string; collection: string; embedded_count: number } | null;
 };
 
 export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) => {
+  // PDF Processing State
   const [chunkSize, setChunkSize] = useState("1200");
   const [overlap, setOverlap] = useState("200");
-  const [limit, setLimit] = useState("");
+  const [pdfLimit, setPdfLimit] = useState("");
   const [skipExistingChunks, setSkipExistingChunks] = useState(true);
-  const [output, setOutput] = useState("");
-  const [stderr, setStderr] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{ processed_pdfs?: number; total_pdfs?: number; missing_files?: number }>({});
-  const [dedupeStatus, setDedupeStatus] = useState<string>("");
-  const [embedStatus, setEmbedStatus] = useState<string>("");
-  const [embedError, setEmbedError] = useState<string | null>(null);
-  const [embedJobId, setEmbedJobId] = useState<string | null>(null);
-  const [embedRunning, setEmbedRunning] = useState(false);
-  const [embedLog, setEmbedLog] = useState("");
-  const [embedProgress, setEmbedProgress] = useState<{ embedded?: number; total?: number; skipped?: number }>({});
+  const [pdfJobId, setPdfJobId] = useState<string | null>(null);
+  const [pdfRunning, setPdfRunning] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<{ processed_pdfs?: number; total_pdfs?: number; missing_files?: number }>({});
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  // Embedding State
   const [embedModel, setEmbedModel] = useState(settings.embedModel || settings.llmModel || "");
   const [embedLimit, setEmbedLimit] = useState<string>("");
   const [skipExistingEmbeds, setSkipExistingEmbeds] = useState(true);
-  const [summStatus, setSummStatus] = useState<string>("");
+  const [embedJobId, setEmbedJobId] = useState<string | null>(null);
+  const [embedRunning, setEmbedRunning] = useState(false);
+  const [embedProgress, setEmbedProgress] = useState<{ embedded?: number; total?: number; skipped?: number }>({});
+  const [embedError, setEmbedError] = useState<string | null>(null);
+
+  // Summary State
   const [summLimit, setSummLimit] = useState<string>("");
   const [summDryRun, setSummDryRun] = useState(false);
   const [skipExistingSummaries, setSkipExistingSummaries] = useState(true);
@@ -59,42 +63,23 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     processed?: number;
     total?: number;
     errors?: number;
-    current_paper_title?: string;
   }>({});
   const [summError, setSummError] = useState<string | null>(null);
-  const [summTargetTotal, setSummTargetTotal] = useState<number | null>(null);
-  const summTargetRef = useRef<number | null>(null);
-  const [stats, setStats] = useState<null | {
-    pdf_count: number;
-    papers_with_pdf: number;
-    papers_with_chunks: number;
-    missing_papers: number;
-    missing_pdfs: number;
-    sample_missing: any[];
-    summary_rows: number;
-    papers_with_summary: number;
-    missing_summary: number;
-    embed?: EmbedJobInfo | null;
-    embed_jobs?: EmbedJobInfo[];
-    chunks_total?: number;
-    embed_estimate?: { persist_dir: string; collection: string; embedded_count: number } | null;
-  }>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
-  const [summaryFinishedNotified, setSummaryFinishedNotified] = useState(false);
 
-  const progressPercent = useMemo(() => {
-    const done = progress.processed_pdfs || 0;
-    const total = progress.total_pdfs || 0;
+  // Stats State
+  const [stats, setStats] = useState<PipelineStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  useEffect(() => {
+    setEmbedModel(settings.embedModel || settings.llmModel || "");
+  }, [settings.embedModel, settings.llmModel]);
+
+  const pdfPercent = useMemo(() => {
+    const done = pdfProgress.processed_pdfs || 0;
+    const total = pdfProgress.total_pdfs || 0;
     if (!total) return 0;
     return Math.min(100, Math.round((done / total) * 100));
-  }, [progress]);
-
-  const summPercent = useMemo(() => {
-    const done = summProgress.processed || 0;
-    const total = summProgress.total || 0;
-    if (!total) return 0;
-    return Math.min(100, Math.round((done / total) * 100));
-  }, [summProgress]);
+  }, [pdfProgress]);
 
   const embedPercent = useMemo(() => {
     const done = (embedProgress.embedded || 0) + (embedProgress.skipped || 0);
@@ -103,68 +88,57 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     return Math.min(100, Math.round((done / total) * 100));
   }, [embedProgress]);
 
+  const summPercent = useMemo(() => {
+    const done = summProgress.processed || 0;
+    const total = summProgress.total || 0;
+    if (!total) return 0;
+    return Math.min(100, Math.round((done / total) * 100));
+  }, [summProgress]);
+
+  const loadStats = async () => {
+    setStatsLoading(true);
+    try {
+      const data = await fetchPipelineStats(settings);
+      setStats(data);
+    } catch (err) {
+      console.error("Failed to load stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Sync embed model from settings when it changes.
-    setEmbedModel(settings.embedModel || settings.llmModel || "");
-  }, [settings.embedModel, settings.llmModel]);
+    loadStats();
+  }, [settings.apiBase]);
 
-  const resolveSummaryTarget = useCallback(
-    async (limitValue?: number | null) => {
-      if (limitValue && limitValue > 0) {
-        return limitValue;
-      }
-      try {
-        const remoteStats = await fetchPipelineStats(settings);
-        setStats(remoteStats);
-        return remoteStats.missing_summary || null;
-      } catch (err) {
-        console.warn("Failed to resolve summary target", err);
-        if (stats && typeof stats.missing_summary === "number") {
-          return stats.missing_summary || null;
-        }
-        return null;
-      }
-    },
-    [stats, settings],
-  );
-
-  const run = async () => {
-    setLoading(true);
-    setError(null);
-    setOutput("");
-    setStderr("");
-    setJobId(null);
-    setRunning(false);
-    setProgress({});
+  const runPdfProcessing = async () => {
+    setPdfError(null);
+    setPdfJobId(null);
+    setPdfRunning(false);
+    setPdfProgress({});
     try {
       const resp = await runProcessPdfs(settings, {
         chunk_size: Number(chunkSize) || 1200,
         overlap: Number(overlap) || 200,
-        limit: limit ? Number(limit) : undefined,
+        limit: pdfLimit ? Number(pdfLimit) : undefined,
         skip_existing: skipExistingChunks,
       });
-      setJobId(resp.job_id);
-      setRunning(true);
-      pollStatus(resp.job_id);
+      setPdfJobId(resp.job_id);
+      setPdfRunning(true);
+      pollPdfStatus(resp.job_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "运行失败");
-    } finally {
-      setLoading(false);
+      setPdfError(err instanceof Error ? err.message : "Failed to start PDF processing");
     }
   };
 
-  const pollStatus = async (jid: string) => {
-    let attempts = 0;
+  const pollPdfStatus = async (jid: string) => {
     const tick = async () => {
-      attempts += 1;
       try {
         const status = await getProcessPdfsStatus(settings, jid);
-        setOutput(status.log || "");
-        setStderr("");
-        setRunning(status.running);
-        setJobId(jid);
+        setPdfRunning(status.running);
+        setPdfJobId(jid);
         if (status.stats) {
-          setProgress({
+          setPdfProgress({
             processed_pdfs: status.stats.processed_pdfs,
             total_pdfs: status.stats.total_pdfs,
             missing_files: status.stats.missing_files,
@@ -174,476 +148,398 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
           setTimeout(tick, 2000);
         } else {
           if (status.returncode !== null && status.returncode !== 0) {
-            setError(`运行失败 (code=${status.returncode})`);
+            setPdfError(`Processing failed (exit code: ${status.returncode})`);
           }
+          loadStats();
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "获取状态失败");
-        setRunning(false);
+        setPdfError(err instanceof Error ? err.message : "Failed to fetch status");
+        setPdfRunning(false);
       }
     };
     tick();
   };
 
-  const pollEmbed = async (jid: string) => {
+  const runEmbedding = async () => {
+    setEmbedError(null);
+    setEmbedProgress({});
     try {
-      const status = await getEmbedStatus(settings, jid);
-      setEmbedLog(status.log || "");
-      const statsPayload = status.stats || {};
-      setEmbedProgress({
-        embedded: statsPayload.embedded ?? 0,
-        total: statsPayload.total_chunks ?? 0,
-        skipped: statsPayload.embedded_skipped ?? 0,
+      const resp = await startEmbedJob(settings, {
+        limit_chunks: embedLimit ? Number(embedLimit) : undefined,
+        embed_model: embedModel || undefined,
+        embed_base_url: settings.embedBaseUrl || settings.llmBaseUrl || undefined,
+        embed_api_key: settings.embedApiKey || settings.llmApiKey || undefined,
+        batch_size: 16,
+        skip_existing: skipExistingEmbeds,
       });
-      setEmbedRunning(status.running);
-      const message =
-        status.last_message ||
-        (status.running
-          ? "运行中…"
-          : `完成（已嵌入 ${statsPayload.embedded ?? 0}/${statsPayload.total_chunks ?? statsPayload.embedded ?? 0}，跳过 ${statsPayload.embedded_skipped ?? 0}）`);
-      setEmbedStatus(message);
-      if (!status.running) {
-        setEmbedJobId(null);
-        if (status.returncode && status.returncode !== 0) {
-          setEmbedError(`程序退出：code=${status.returncode}`);
-        } else {
-          setEmbedError(null);
-        }
-        setEmbedRunning(false);
-      }
-      if (status.running) {
-        setTimeout(() => pollEmbed(jid), 2000);
-      }
+      setEmbedJobId(resp.job_id);
+      setEmbedRunning(true);
+      pollEmbedStatus(resp.job_id);
     } catch (err) {
-      setEmbedError(err instanceof Error ? err.message : "获取嵌入状态失败");
-      setEmbedRunning(false);
+      setEmbedError(err instanceof Error ? err.message : "Failed to start embedding");
     }
   };
 
-  const pollSummarize = async (jid: string) => {
+  const pollEmbedStatus = async (jid: string) => {
+    const tick = async () => {
+      try {
+        const status = await getEmbedStatus(settings, jid);
+        const statsPayload = status.stats || {};
+        setEmbedProgress({
+          embedded: statsPayload.embedded ?? 0,
+          total: statsPayload.total_chunks ?? 0,
+          skipped: statsPayload.embedded_skipped ?? 0,
+        });
+        setEmbedRunning(status.running);
+        if (!status.running) {
+          setEmbedJobId(null);
+          if (status.returncode && status.returncode !== 0) {
+            setEmbedError(`Embedding failed (exit code: ${status.returncode})`);
+          }
+          loadStats();
+        }
+        if (status.running) {
+          setTimeout(tick, 2000);
+        }
+      } catch (err) {
+        setEmbedError(err instanceof Error ? err.message : "Failed to fetch embed status");
+        setEmbedRunning(false);
+      }
+    };
+    tick();
+  };
+
+  const runSummarization = async () => {
+    setSummError(null);
+    setSummProgress({});
     try {
-      const status = await getSummarizeStatus(settings, jid);
-      const statsPayload = status.stats || {};
-      const processedCount = statsPayload.processed_papers ?? statsPayload.processed ?? 0;
-      const backendTotal = statsPayload.total_papers || statsPayload.papers_with_pdf || 0;
-      const targetTotal =
-        summTargetRef.current ??
-        summTargetTotal ??
-        (backendTotal || null) ??
-        (processedCount || null);
-      setSummProgress({
-        processed: processedCount,
-        total: targetTotal || backendTotal || processedCount || 0,
-        errors: statsPayload.errors ?? 0,
-        current_paper_title: statsPayload.current_paper_title,
+      const resp = await triggerSummarize(settings, {
+        limit: summLimit ? Number(summLimit) : undefined,
+        chunk_chars: 4000,
+        skip_existing: skipExistingSummaries,
+        dry_run: summDryRun,
       });
-      setSummRunning(status.running);
-      const message =
-        status.last_message ||
-        (status.running
-          ? "运行中…"
-          : `完成（已生成 ${processedCount}/${targetTotal || backendTotal || processedCount}）`);
-      setSummStatus(message);
-      if (!status.running) {
-        setSummJobId(null);
-        if (!summTargetRef.current && !summTargetTotal && processedCount > 0) {
-          setSummTargetTotal(processedCount);
-          summTargetRef.current = processedCount;
-          setSummProgress((prev) => ({
-            ...prev,
-            total: processedCount,
-          }));
+      setSummJobId(resp.job_id);
+      setSummRunning(true);
+      pollSummStatus(resp.job_id);
+    } catch (err) {
+      setSummError(err instanceof Error ? err.message : "Failed to start summarization");
+    }
+  };
+
+  const pollSummStatus = async (jid: string) => {
+    const tick = async () => {
+      try {
+        const status = await getSummarizeStatus(settings, jid);
+        const statsPayload = status.stats || {};
+        const processedCount = statsPayload.processed_papers ?? statsPayload.processed ?? 0;
+        const totalCount = statsPayload.total_papers || statsPayload.papers_with_pdf || processedCount;
+        setSummProgress({
+          processed: processedCount,
+          total: totalCount,
+          errors: statsPayload.errors ?? 0,
+        });
+        setSummRunning(status.running);
+        if (!status.running) {
+          setSummJobId(null);
+          if (status.returncode && status.returncode !== 0) {
+            setSummError(`Summarization failed (exit code: ${status.returncode})`);
+          } else {
+            onSummaryFinished?.();
+          }
+          loadStats();
         }
-        if (!summaryFinishedNotified) {
-          onSummaryFinished?.();
-          setSummaryFinishedNotified(true);
+        if (status.running) {
+          setTimeout(tick, 2000);
         }
-        fetchPipelineStats(settings)
-          .then((data) => setStats(data))
-          .catch((err) => console.warn("Failed to refresh stats after summarize", err));
-        if (status.returncode && status.returncode !== 0) {
-          setSummError(`程序退出：code=${status.returncode}`);
-        } else {
-          setSummError(null);
-        }
+      } catch (err) {
+        setSummError(err instanceof Error ? err.message : "Failed to fetch summary status");
         setSummRunning(false);
       }
-      if (status.running) {
-        setTimeout(() => pollSummarize(jid), 2000);
-      }
-    } catch (err) {
-      setSummError(err instanceof Error ? err.message : "获取摘要状态失败");
-      setSummRunning(false);
-    }
+    };
+    tick();
   };
 
   return (
-    <div className="panel">
-      <div className="panel-header">
-        <div className="pill">PDF 切片</div>
-        {running && (
-          <div className="pill">
-            运行中 {progress.processed_pdfs || 0}/{progress.total_pdfs || "?"}
+    <>
+      {/* PDF Processing */}
+      <div className="action-card">
+        <div className="action-card-header">
+          <h3 className="action-card-title">PDF Processing</h3>
+          {pdfRunning && (
+            <span className="pill info">
+              {pdfProgress.processed_pdfs || 0}/{pdfProgress.total_pdfs || "?"}
+            </span>
+          )}
+        </div>
+        <div className="action-card-body">
+          <p className="action-description">
+            Extract text from PDFs and split into chunks for embedding and retrieval.
+          </p>
+          
+          {pdfRunning && pdfProgress.total_pdfs ? (
+            <div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${pdfPercent}%` }} />
+              </div>
+              <div className="summary-progress-meta" style={{ marginTop: 8 }}>
+                <span>Processed: {pdfProgress.processed_pdfs || 0}/{pdfProgress.total_pdfs}</span>
+                {pdfProgress.missing_files ? <span>Missing: {pdfProgress.missing_files}</span> : null}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="stack">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="settings-row">
+                <label>Chunk Size</label>
+                <input value={chunkSize} onChange={(e) => setChunkSize(e.target.value)} />
+              </div>
+              <div className="settings-row">
+                <label>Overlap</label>
+                <input value={overlap} onChange={(e) => setOverlap(e.target.value)} />
+              </div>
+            </div>
+            <div className="settings-row">
+              <label>Limit (optional)</label>
+              <input
+                value={pdfLimit}
+                onChange={(e) => setPdfLimit(e.target.value)}
+                placeholder="Leave empty to process all"
+              />
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={skipExistingChunks}
+                onChange={(e) => setSkipExistingChunks(e.target.checked)}
+              />
+              <span>Skip existing chunks</span>
+            </label>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button className="primary-btn" onClick={runPdfProcessing} disabled={pdfRunning}>
+                {pdfRunning ? "Processing..." : "Start Processing"}
+              </button>
+              {pdfRunning && pdfJobId && (
+                <button
+                  className="ghost-btn"
+                  onClick={async () => {
+                    try {
+                      await stopProcessPdfs(settings, pdfJobId);
+                      setPdfRunning(false);
+                    } catch (err) {
+                      setPdfError(err instanceof Error ? err.message : "Failed to stop");
+                    }
+                  }}
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+            {pdfError && <div className="error-banner">{pdfError}</div>}
           </div>
-        )}
-        {loading && <div className="pill">启动中…</div>}
-        {progress.missing_files ? <div className="pill warn">缺失 {progress.missing_files}</div> : null}
+        </div>
       </div>
-      {running || progress.total_pdfs ? (
-        <div style={{ background: "#1f2937", borderRadius: 10, height: 10, overflow: "hidden", marginBottom: 8 }}>
-          <div
-            style={{
-              width: `${progressPercent}%`,
-              height: "100%",
-              background: "linear-gradient(90deg, #8b5cf6, #22d3ee)",
-              transition: "width 0.3s ease",
-            }}
-          />
-        </div>
-      ) : null}
-      <div className="stack">
-        <div className="stack-row">
-          <label className="muted">chunk size</label>
-          <input value={chunkSize} onChange={(e) => setChunkSize(e.target.value)} />
-        </div>
-        <div className="stack-row">
-          <label className="muted">overlap</label>
-          <input value={overlap} onChange={(e) => setOverlap(e.target.value)} />
-        </div>
-        <div className="stack-row">
-          <label className="muted">limit（可选）</label>
-          <input value={limit} onChange={(e) => setLimit(e.target.value)} />
-        </div>
-        <div className="stack-row">
-          <label className="muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input type="checkbox" checked={skipExistingChunks} onChange={(e) => setSkipExistingChunks(e.target.checked)} />
-            跳过已有切片
-          </label>
-        </div>
-        <button className="primary-btn" onClick={run} disabled={loading}>
-          {loading ? "运行中…" : "运行 process_pdfs"}
-        </button>
-        {running && jobId && (
-          <div className="stack-row">
-            <button
-              className="ghost-btn"
-              onClick={async () => {
-                try {
-                  await stopProcessPdfs(settings, jobId);
-                  setRunning(false);
-                  setError(null);
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "停止失败");
-                }
-              }}
-            >
-              停止切片
-            </button>
-            <span className="muted">已处理 {progress.processed_pdfs || 0}/{progress.total_pdfs || "?"}</span>
-          </div>
-        )}
 
-        <div className="stack-row">
-          <button
-            className="ghost-btn"
-            onClick={async () => {
-              setDedupeStatus("去重中…");
-              try {
-                const resp = await dedupeAttachments(settings);
-                setDedupeStatus(`去重完成，删除 ${resp.result?.deleted ?? 0} 条重复附件`);
-              } catch (err) {
-                setDedupeStatus(err instanceof Error ? err.message : "去重失败");
-              }
-            }}
-          >
-            清理重复附件
-          </button>
-          {dedupeStatus && <span className="muted">{dedupeStatus}</span>}
+      {/* Embedding */}
+      <div className="action-card">
+        <div className="action-card-header">
+          <h3 className="action-card-title">Vector Embeddings</h3>
+          {embedRunning && (
+            <span className="pill info">
+              {embedProgress.embedded || 0}/{embedProgress.total || "?"}
+            </span>
+          )}
         </div>
+        <div className="action-card-body">
+          <p className="action-description">
+            Generate vector embeddings for text chunks to enable semantic search.
+          </p>
 
-        <div className="pipeline-subsection">
-          <div className="stack-row" style={{ gap: 8, alignItems: "center" }}>
-            <label className="muted">Embedding model</label>
-            <input
-              style={{ maxWidth: 200 }}
-              value={embedModel}
-              onChange={(e) => setEmbedModel(e.target.value)}
-              placeholder="如 text-embedding-3-large"
-            />
-            <label className="muted" style={{ minWidth: 90 }}>Limit（可选）</label>
-            <input
-              style={{ maxWidth: 120 }}
-              value={embedLimit}
-              onChange={(e) => setEmbedLimit(e.target.value)}
-              placeholder="不填为全部"
-            />
-            <label className="muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {embedRunning && embedProgress.total ? (
+            <div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${embedPercent}%` }} />
+              </div>
+              <div className="summary-progress-meta" style={{ marginTop: 8 }}>
+                <span>Embedded: {embedProgress.embedded || 0}/{embedProgress.total}</span>
+                <span>Skipped: {embedProgress.skipped || 0}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="stack">
+            <div className="settings-row">
+              <label>Embedding Model</label>
+              <input
+                value={embedModel}
+                onChange={(e) => setEmbedModel(e.target.value)}
+                placeholder="e.g., text-embedding-3-large"
+              />
+            </div>
+            <div className="settings-row">
+              <label>Limit (optional)</label>
+              <input
+                value={embedLimit}
+                onChange={(e) => setEmbedLimit(e.target.value)}
+                placeholder="Leave empty to process all"
+              />
+            </div>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={skipExistingEmbeds}
                 onChange={(e) => setSkipExistingEmbeds(e.target.checked)}
                 disabled={embedRunning}
               />
-              跳过已嵌入
+              <span>Skip already embedded chunks</span>
             </label>
-            <button
-              className="ghost-btn"
-              onClick={async () => {
-                setEmbedStatus("启动嵌入…");
-                setEmbedError(null);
-                setEmbedProgress({});
-                setEmbedLog("");
-                try {
-                  const resp = await startEmbedJob(settings, {
-                    limit_chunks: embedLimit ? Number(embedLimit) : undefined,
-                    embed_model: embedModel || undefined,
-                    embed_base_url: settings.embedBaseUrl || settings.llmBaseUrl || undefined,
-                    embed_api_key: settings.embedApiKey || settings.llmApiKey || undefined,
-                    batch_size: 16,
-                    skip_existing: skipExistingEmbeds,
-                  });
-                  setEmbedJobId(resp.job_id);
-                  setEmbedRunning(true);
-                  setEmbedStatus(`已启动 job ${resp.job_id}`);
-                  pollEmbed(resp.job_id);
-                } catch (err) {
-                  setEmbedStatus(err instanceof Error ? err.message : "触发失败");
-                }
-              }}
-              disabled={embedRunning}
-            >
-              触发向量嵌入
-            </button>
-          </div>
-          <div className="stack-row" style={{ gap: 12, flexWrap: "wrap" }}>
-            {embedStatus && (
-              <span className="pill" style={{ background: embedRunning ? "#1f2937" : "#334155" }}>
-                {embedStatus}
-              </span>
-            )}
-            {embedError && <span className="pill warn">{embedError}</span>}
-            {embedProgress.skipped ? <span className="muted">已跳过 {embedProgress.skipped}</span> : null}
-          </div>
-          {embedProgress.total ? (
-            <>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${embedPercent}%` }} />
-              </div>
-              <div className="summary-progress-meta">
-                <span>
-                  已嵌入 {embedProgress.embedded ?? 0}/{embedProgress.total}
-                </span>
-                <span>跳过 {embedProgress.skipped ?? 0}</span>
-              </div>
-            </>
-          ) : embedRunning ? (
-            <div className="muted">嵌入任务准备中…</div>
-          ) : null}
-          {embedRunning && embedJobId && (
-            <div className="stack-row" style={{ gap: 8, alignItems: "center" }}>
-              <button
-                className="ghost-btn"
-                onClick={async () => {
-                  if (!embedJobId) return;
-                  try {
-                    await stopEmbedJob(settings, embedJobId);
-                    setEmbedRunning(false);
-                    setEmbedStatus("已请求停止");
-                  } catch (err) {
-                    setEmbedStatus(err instanceof Error ? err.message : "停止失败");
-                  }
-                }}
-              >
-                停止嵌入
+            <div style={{ display: "flex", gap: 12 }}>
+              <button className="primary-btn" onClick={runEmbedding} disabled={embedRunning}>
+                {embedRunning ? "Embedding..." : "Start Embedding"}
               </button>
-              <span className="muted">
-                已嵌入 {embedProgress.embedded ?? 0}/{embedProgress.total ?? "?"}，跳过 {embedProgress.skipped ?? 0}
-              </span>
+              {embedRunning && embedJobId && (
+                <button
+                  className="ghost-btn"
+                  onClick={async () => {
+                    try {
+                      await stopEmbedJob(settings, embedJobId);
+                      setEmbedRunning(false);
+                    } catch (err) {
+                      setEmbedError(err instanceof Error ? err.message : "Failed to stop");
+                    }
+                  }}
+                >
+                  Stop
+                </button>
+              )}
             </div>
+            {embedError && <div className="error-banner">{embedError}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Summarization */}
+      <div className="action-card">
+        <div className="action-card-header">
+          <h3 className="action-card-title">AI Summarization</h3>
+          {summRunning && (
+            <span className="pill info">
+              {summProgress.processed || 0}/{summProgress.total || "?"}
+            </span>
           )}
         </div>
+        <div className="action-card-body">
+          <p className="action-description">
+            Generate AI-powered summaries, one-liners, and tags for papers.
+          </p>
 
-        <div className="pipeline-subsection">
-          <div className="stack-row">
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <label className="muted">summary limit</label>
-              <input style={{ maxWidth: 120 }} value={summLimit} onChange={(e) => setSummLimit(e.target.value)} />
-              <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <input type="checkbox" checked={summDryRun} onChange={(e) => setSummDryRun(e.target.checked)} />
-                dry-run
-              </label>
-              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {summRunning && summProgress.total ? (
+            <div>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${summPercent}%` }} />
+              </div>
+              <div className="summary-progress-meta" style={{ marginTop: 8 }}>
+                <span>Processed: {summProgress.processed || 0}/{summProgress.total}</span>
+                <span>Errors: {summProgress.errors || 0}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="stack">
+            <div className="settings-row">
+              <label>Limit (optional)</label>
+              <input
+                value={summLimit}
+                onChange={(e) => setSummLimit(e.target.value)}
+                placeholder="Leave empty to process all"
+              />
+            </div>
+            <div style={{ display: "flex", gap: 16 }}>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={skipExistingSummaries}
                   onChange={(e) => setSkipExistingSummaries(e.target.checked)}
                   disabled={summRunning}
                 />
-                跳过已有摘要
+                <span>Skip existing summaries</span>
+              </label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={summDryRun}
+                  onChange={(e) => setSummDryRun(e.target.checked)}
+                />
+                <span>Dry run</span>
               </label>
             </div>
-            <button
-              className="ghost-btn"
-              onClick={async () => {
-                setSummStatus("启动摘要…");
-                setSummProgress({});
-                setSummError(null);
-                setSummaryFinishedNotified(false);
-                const limitValue = summLimit ? Number(summLimit) : undefined;
-                if (limitValue) {
-                  setSummTargetTotal(limitValue);
-                  summTargetRef.current = limitValue;
-                } else {
-                  setSummTargetTotal(null);
-                  summTargetRef.current = null;
-                }
-                const targetPromise = resolveSummaryTarget(limitValue);
-                try {
-                  const resp = await triggerSummarize(settings, {
-                    limit: limitValue,
-                    chunk_chars: 4000,
-                    skip_existing: skipExistingSummaries,
-                    dry_run: summDryRun,
-                  });
-                  setSummJobId(resp.job_id);
-                  setSummRunning(true);
-                  setSummStatus(`已启动 job ${resp.job_id}`);
-                  pollSummarize(resp.job_id);
-                  targetPromise
-                    .then((value) => {
-                      setSummTargetTotal(value);
-                      summTargetRef.current = value ?? null;
-                      setSummProgress((prev) => ({
-                        ...prev,
-                        total: value || prev.total || 0,
-                      }));
-                    })
-                    .catch((err) => {
-                      console.warn("Failed to fetch summary target", err);
-                    });
-                } catch (err) {
-                  setSummStatus(err instanceof Error ? err.message : "触发失败");
-                }
-              }}
-            >
-              触发AI摘要/标签
+            <div style={{ display: "flex", gap: 12 }}>
+              <button className="primary-btn" onClick={runSummarization} disabled={summRunning}>
+                {summRunning ? "Summarizing..." : "Start Summarization"}
+              </button>
+              {summRunning && summJobId && (
+                <button
+                  className="ghost-btn"
+                  onClick={async () => {
+                    try {
+                      await stopSummarize(settings, summJobId);
+                      setSummRunning(false);
+                    } catch (err) {
+                      setSummError(err instanceof Error ? err.message : "Failed to stop");
+                    }
+                  }}
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+            {summError && <div className="error-banner">{summError}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      {stats && (
+        <div className="action-card">
+          <div className="action-card-header">
+            <h3 className="action-card-title">Pipeline Statistics</h3>
+            <button className="ghost-btn" onClick={loadStats} disabled={statsLoading}>
+              Refresh
             </button>
           </div>
-          <div className="stack-row" style={{ gap: 12, flexWrap: "wrap" }}>
-            {summStatus && (
-              <span className="pill" style={{ background: summRunning ? "#1f2937" : "#334155" }}>
-                {summStatus}
-              </span>
-            )}
-            {summTargetTotal && (
-              <span className="muted">本次计划处理 {summTargetTotal} 篇</span>
-            )}
-            {summError && <span className="pill warn">{summError}</span>}
-          </div>
-          {summProgress.total ? (
-            <>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${summPercent}%` }} />
+          <div className="action-card-body">
+            <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                <span className="muted">Total PDFs:</span>
+                <span>{stats.pdf_count}</span>
               </div>
-              <div className="summary-progress-meta">
-                <span>
-                  已生成 {summProgress.processed ?? 0}/{summProgress.total}
-                </span>
-                <span>错误 {summProgress.errors ?? 0}</span>
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                <span className="muted">Papers with PDFs:</span>
+                <span>{stats.papers_with_pdf}</span>
               </div>
-            </>
-          ) : summRunning ? (
-            <div className="muted">摘要任务准备中…</div>
-          ) : null}
-          {summProgress.current_paper_title && (
-            <div className="muted" style={{ fontSize: 13 }}>
-              当前正在处理: {summProgress.current_paper_title}
-            </div>
-          )}
-          {summRunning && (
-            <div className="stack-row">
-              <button
-                className="ghost-btn"
-                onClick={async () => {
-                  if (!summJobId) return;
-                  try {
-                    await stopSummarize(settings, summJobId);
-                    setSummRunning(false);
-                    setSummStatus("已请求停止");
-                  } catch (err) {
-                    setSummStatus(err instanceof Error ? err.message : "停止失败");
-                  }
-                }}
-              >
-                停止摘要
-              </button>
-              <span className="muted">
-                已处理 {summProgress.processed ?? 0}/{summProgress.total ?? "?"}，错误 {summProgress.errors ?? 0}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="stack-row">
-          <button
-            className="ghost-btn"
-            onClick={async () => {
-              try {
-                setStatsError(null);
-                const data = await fetchPipelineStats(settings);
-                setStats(data);
-              } catch (err) {
-                setStatsError(err instanceof Error ? err.message : "获取统计失败");
-              }
-            }}
-          >
-            获取切片/摘要/嵌入统计
-          </button>
-          {statsError && <span className="pill warn">{statsError}</span>}
-        </div>
-
-        {stats && (
-          <div className="summary-block" style={{ maxHeight: 220, overflow: "auto" }}>
-            <h4>统计</h4>
-            <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-              <span>PDF 总数: {stats.pdf_count}</span>
-              <span>有 PDF 的论文数: {stats.papers_with_pdf}</span>
-              <span>已有 chunk 的论文数: {stats.papers_with_chunks}</span>
-              <span>缺少 chunk 的论文数: {stats.missing_papers}</span>
-              <span>未切片的 PDF 数: {stats.missing_pdfs}</span>
-              <span>已有摘要的论文数: {stats.papers_with_summary}</span>
-              <span>缺少摘要的论文数: {stats.missing_summary}</span>
-              <span>Chunk 总数: {stats.chunks_total ?? "—"}</span>
-              {stats.embed_estimate ? (
-                <span>
-                  向量库进度: {stats.embed_estimate.embedded_count}/{stats.chunks_total ?? "?"} （{stats.embed_estimate.collection}）
-                </span>
-              ) : null}
-              {stats.embed_estimate ? null : <span className="muted">无嵌入统计</span>}
-            </div>
-            {stats.sample_missing?.length > 0 && (
-              <div style={{ marginTop: 6 }}>
-                <div className="muted">未切片示例（最多 20 条）：</div>
-                <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-                  {stats.sample_missing.map((m) => `${m.paper_id} | ${m.path}`).join("\n")}
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                <span className="muted">Papers with chunks:</span>
+                <span>{stats.papers_with_chunks}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                <span className="muted">Papers with summaries:</span>
+                <span>{stats.papers_with_summary}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                <span className="muted">Total chunks:</span>
+                <span>{stats.chunks_total ?? "N/A"}</span>
+              </div>
+              {stats.embed_estimate && (
+                <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 8 }}>
+                  <span className="muted">Embedded chunks:</span>
+                  <span>{stats.embed_estimate.embedded_count}/{stats.chunks_total ?? "?"}</span>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-        {(output || stderr) && (
-          <div className="summary-block" style={{ maxHeight: 220, overflow: "auto" }}>
-            <h4>日志</h4>
-            <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-              {[...output.split("\n"), ...stderr.split("\n")]
-                .filter(Boolean)
-                .slice(-40)
-                .join("\n")}
+              )}
             </div>
           </div>
-        )}
-        {error && <div className="pill warn">{error}</div>}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };

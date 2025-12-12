@@ -36,45 +36,58 @@ export const ManagementPage: React.FC<ManagementPageProps> = ({ settings }) => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Data Management</h1>
-          <p className="page-subtitle">Import, process, and manage your paper collection</p>
+          <p className="page-subtitle">Import data and run processing pipelines</p>
         </div>
+        <button className="ghost-btn" onClick={loadStats}>
+          Refresh
+        </button>
       </div>
 
-      <div className="management-grid">
-        <div className="panel stats-panel">
-          <div className="panel-header">
-            <h3>📊 Statistics</h3>
-          </div>
-          <div className="stats-content">
-            <div className="stat-item">
-              <div className="stat-value">{loading ? "..." : stats.total}</div>
+      <div className="management-layout">
+        {/* Statistics Section */}
+        <div className="management-section">
+          <h2 className="management-section-title">Statistics</h2>
+          <div className="stats-grid">
+            <div className="stat-card">
               <div className="stat-label">Total Papers</div>
+              <div className="stat-value">{loading ? "..." : stats.total.toLocaleString()}</div>
             </div>
-            <div className="stat-item">
-              <div className="stat-value">{stats.lastUpdate || "N/A"}</div>
+            <div className="stat-card">
               <div className="stat-label">Last Updated</div>
+              <div className="stat-value" style={{ fontSize: "18px" }}>
+                {stats.lastUpdate || "N/A"}
+              </div>
             </div>
           </div>
-          <button className="ghost-btn" onClick={loadStats} style={{ width: "100%", marginTop: 12 }}>
-            🔄 Refresh Stats
-          </button>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <h3>📥 Import Data</h3>
+        {/* Import Section */}
+        <div className="management-section">
+          <h2 className="management-section-title">Import Data</h2>
+          <div className="action-grid">
+            <div className="action-card">
+              <div className="action-card-header">
+                <h3 className="action-card-title">CSV Import</h3>
+              </div>
+              <div className="action-card-body">
+                <p className="action-description">
+                  Upload a Zotero CSV export file to import papers into the database.
+                  The CSV should contain paper metadata including titles, authors, DOIs, and file attachments.
+                </p>
+                <CsvUploader settings={settings} onUploaded={loadStats} />
+              </div>
+            </div>
           </div>
-          <CsvUploader settings={settings} onUploaded={loadStats} />
         </div>
 
-        <div className="panel pipeline-panel">
-          <div className="panel-header">
-            <h3>⚡ Processing Pipeline</h3>
+        {/* Processing Pipeline Section */}
+        <div className="management-section">
+          <h2 className="management-section-title">Processing Pipeline</h2>
+          <div className="action-grid">
+            <PipelinePanel settings={settings} onSummaryFinished={loadStats} />
           </div>
-          <PipelinePanel settings={settings} onSummaryFinished={loadStats} />
         </div>
       </div>
     </div>
   );
 };
-

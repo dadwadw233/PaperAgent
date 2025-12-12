@@ -76,13 +76,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onChange }
           <p className="page-subtitle">Configure API endpoints and model parameters</p>
         </div>
         <button className="ghost-btn" onClick={resetToDefaults}>
-          🔄 Reset to Defaults
+          Reset to Defaults
         </button>
       </div>
 
       {successMessage && (
         <div className="success-banner">
-          ✅ {successMessage}
+          {successMessage}
         </div>
       )}
 
@@ -100,7 +100,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onChange }
 
         <div className="panel settings-info-panel">
           <div className="panel-header">
-            <h3>ℹ️ About Settings</h3>
+            <h3>About Settings</h3>
           </div>
           <div className="info-content">
             <div className="info-section">

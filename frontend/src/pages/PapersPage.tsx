@@ -106,7 +106,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
           </p>
         </div>
         <button className="primary-btn" onClick={runSearch}>
-          🔄 Refresh
+          Refresh
         </button>
       </div>
 
