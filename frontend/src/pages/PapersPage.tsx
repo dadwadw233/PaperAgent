@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { fetchPaperDetail, fetchPapers } from "../api";
 import { SearchBar } from "../components/SearchBar";
 import { PaperList } from "../components/PaperList";
@@ -25,7 +25,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PaperDetail | null>(null);
 
-  const runSearch = async () => {
+  const runSearch = useCallback(async () => {
     setListLoading(true);
     setListError(null);
     try {
@@ -44,13 +44,12 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
         setSelectedId(null);
         setDetail(null);
       }
-      setLoadMoreLoading(false);
     } catch (err) {
       setListError(err instanceof Error ? err.message : "Failed to load list");
     } finally {
       setListLoading(false);
     }
-  };
+  }, [query, itemType, searchField, settings]);
 
   const loadMore = async () => {
     if (loadMoreLoading || listLoading) return;
@@ -88,8 +87,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
 
   useEffect(() => {
     runSearch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.apiBase]);
+  }, [settings.apiBase, runSearch]);
 
   useEffect(() => {
     if (selectedId !== null) {

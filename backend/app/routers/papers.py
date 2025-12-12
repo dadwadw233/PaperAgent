@@ -31,7 +31,7 @@ def parse_search_fields(raw: Optional[str]) -> List[str]:
         if token == "summary":
             expanded.extend(SUMMARY_FIELD_KEYS)
         elif token == "title_abstract":
-            expanded.extend(["title", "abstract"])
+            expanded.extend(["title", "abstract", "authors"])  # 包含作者
         elif token in FIELD_COLUMN_MAP:
             expanded.append(token)
     return expanded or DEFAULT_SEARCH_FIELDS
