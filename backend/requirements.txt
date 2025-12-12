@@ -7,3 +7,4 @@ httpx
 python-dotenv
 pypdf
 chromadb
+python-multipart
