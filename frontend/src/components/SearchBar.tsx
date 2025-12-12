@@ -55,10 +55,11 @@ export const SearchBar: React.FC<Props> = ({
         onChange={(e) => onSearchFieldChange(e.target.value)}
         title="Search fields"
       >
+        <option value="title_abstract_authors">All Fields</option>
         <option value="title_abstract">Title + Abstract</option>
         <option value="title">Title only</option>
         <option value="abstract">Abstract only</option>
-        <option value="authors">Authors</option>
+        <option value="authors">Authors only</option>
         <option value="summary_long">AI Summary (Long)</option>
         <option value="summary_one_liner">AI Summary (One-liner)</option>
         <option value="summary_snarky">AI Summary (Snarky)</option>

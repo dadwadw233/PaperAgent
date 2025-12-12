@@ -14,7 +14,7 @@ interface PapersPageProps {
 export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
   const [query, setQuery] = useState("");
   const [itemType, setItemType] = useState("");
-  const [searchField, setSearchField] = useState("title_abstract");
+  const [searchField, setSearchField] = useState("title_abstract_authors");
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [listLoading, setListLoading] = useState(false);

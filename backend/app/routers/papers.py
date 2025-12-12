@@ -31,7 +31,9 @@ def parse_search_fields(raw: Optional[str]) -> List[str]:
         if token == "summary":
             expanded.extend(SUMMARY_FIELD_KEYS)
         elif token == "title_abstract":
-            expanded.extend(["title", "abstract", "authors"])  # 包含作者
+            expanded.extend(["title", "abstract"])  # 只包含标题和摘要
+        elif token == "title_abstract_authors":
+            expanded.extend(["title", "abstract", "authors"])  # 包含标题、摘要、作者
         elif token in FIELD_COLUMN_MAP:
             expanded.append(token)
     return expanded or DEFAULT_SEARCH_FIELDS
@@ -49,7 +51,7 @@ def list_papers(
     item_type: Optional[str] = Query(default=None),
     search_fields: Optional[str] = Query(
         default=None,
-        description="指定检索字段（逗号分隔），可选：title, abstract, authors, title_abstract, summary, summary_long, summary_one_liner, summary_snarky",
+        description="指定检索字段（逗号分隔），可选：title, abstract, authors, title_abstract, title_abstract_authors, summary, summary_long, summary_one_liner, summary_snarky",
     ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
