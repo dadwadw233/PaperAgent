@@ -6,6 +6,7 @@ import {
   runProcessPdfs,
   startEmbedJob,
   getEmbedStatus,
+  stopEmbedJob,
   triggerSummarize,
   getSummarizeStatus,
   stopSummarize,
@@ -17,6 +18,14 @@ interface Props {
   settings: Settings;
   onSummaryFinished?: () => void;
 }
+
+type EmbedJobInfo = {
+  job_id: string;
+  running: boolean;
+  returncode?: number | null;
+  stats?: any;
+  last_message?: string;
+};
 
 export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) => {
   const [chunkSize, setChunkSize] = useState("1200");
@@ -36,15 +45,16 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   const [embedJobId, setEmbedJobId] = useState<string | null>(null);
   const [embedRunning, setEmbedRunning] = useState(false);
   const [embedLog, setEmbedLog] = useState("");
-  const [embedProgress, setEmbedProgress] = useState<{ embedded?: number; total?: number }>({});
+  const [embedProgress, setEmbedProgress] = useState<{ embedded?: number; total?: number; skipped?: number }>({});
   const [embedModel, setEmbedModel] = useState(settings.embedModel || settings.llmModel || "");
   const [embedLimit, setEmbedLimit] = useState<string>("");
+  const [skipExistingEmbeds, setSkipExistingEmbeds] = useState(true);
   const [summStatus, setSummStatus] = useState<string>("");
   const [summLimit, setSummLimit] = useState<string>("");
   const [summDryRun, setSummDryRun] = useState(false);
+  const [skipExistingSummaries, setSkipExistingSummaries] = useState(true);
   const [summJobId, setSummJobId] = useState<string | null>(null);
   const [summRunning, setSummRunning] = useState(false);
-  const [summLog, setSummLog] = useState("");
   const [summProgress, setSummProgress] = useState<{
     processed?: number;
     total?: number;
@@ -64,6 +74,10 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     summary_rows: number;
     papers_with_summary: number;
     missing_summary: number;
+    embed?: EmbedJobInfo | null;
+    embed_jobs?: EmbedJobInfo[];
+    chunks_total?: number;
+    embed_estimate?: { persist_dir: string; collection: string; embedded_count: number } | null;
   }>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [summaryFinishedNotified, setSummaryFinishedNotified] = useState(false);
@@ -83,7 +97,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   }, [summProgress]);
 
   const embedPercent = useMemo(() => {
-    const done = embedProgress.embedded || 0;
+    const done = (embedProgress.embedded || 0) + (embedProgress.skipped || 0);
     const total = embedProgress.total || 0;
     if (!total) return 0;
     return Math.min(100, Math.round((done / total) * 100));
@@ -179,13 +193,14 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
       setEmbedProgress({
         embedded: statsPayload.embedded ?? 0,
         total: statsPayload.total_chunks ?? 0,
+        skipped: statsPayload.embedded_skipped ?? 0,
       });
       setEmbedRunning(status.running);
       const message =
         status.last_message ||
         (status.running
           ? "运行中…"
-          : `完成（已嵌入 ${statsPayload.embedded ?? 0}/${statsPayload.total_chunks ?? statsPayload.embedded ?? 0}）`);
+          : `完成（已嵌入 ${statsPayload.embedded ?? 0}/${statsPayload.total_chunks ?? statsPayload.embedded ?? 0}，跳过 ${statsPayload.embedded_skipped ?? 0}）`);
       setEmbedStatus(message);
       if (!status.running) {
         setEmbedJobId(null);
@@ -194,6 +209,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
         } else {
           setEmbedError(null);
         }
+        setEmbedRunning(false);
       }
       if (status.running) {
         setTimeout(() => pollEmbed(jid), 2000);
@@ -207,7 +223,6 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   const pollSummarize = async (jid: string) => {
     try {
       const status = await getSummarizeStatus(settings, jid);
-      setSummLog(status.log || "");
       const statsPayload = status.stats || {};
       const processedCount = statsPayload.processed_papers ?? statsPayload.processed ?? 0;
       const backendTotal = statsPayload.total_papers || statsPayload.papers_with_pdf || 0;
@@ -358,12 +373,19 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
             <label className="muted" style={{ minWidth: 90 }}>Limit（可选）</label>
             <input
               style={{ maxWidth: 120 }}
-              value={embedProgress.total || ""}
-              onChange={() => {}}
-              disabled
-              placeholder="自动"
-              title="当前统计仅显示目标数"
+              value={embedLimit}
+              onChange={(e) => setEmbedLimit(e.target.value)}
+              placeholder="不填为全部"
             />
+            <label className="muted" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={skipExistingEmbeds}
+                onChange={(e) => setSkipExistingEmbeds(e.target.checked)}
+                disabled={embedRunning}
+              />
+              跳过已嵌入
+            </label>
             <button
               className="ghost-btn"
               onClick={async () => {
@@ -373,8 +395,12 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 setEmbedLog("");
                 try {
                   const resp = await startEmbedJob(settings, {
+                    limit_chunks: embedLimit ? Number(embedLimit) : undefined,
                     embed_model: embedModel || undefined,
+                    embed_base_url: settings.embedBaseUrl || settings.llmBaseUrl || undefined,
+                    embed_api_key: settings.embedApiKey || settings.llmApiKey || undefined,
                     batch_size: 16,
+                    skip_existing: skipExistingEmbeds,
                   });
                   setEmbedJobId(resp.job_id);
                   setEmbedRunning(true);
@@ -396,6 +422,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               </span>
             )}
             {embedError && <span className="pill warn">{embedError}</span>}
+            {embedProgress.skipped ? <span className="muted">已跳过 {embedProgress.skipped}</span> : null}
           </div>
           {embedProgress.total ? (
             <>
@@ -406,17 +433,32 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 <span>
                   已嵌入 {embedProgress.embedded ?? 0}/{embedProgress.total}
                 </span>
+                <span>跳过 {embedProgress.skipped ?? 0}</span>
               </div>
             </>
           ) : embedRunning ? (
             <div className="muted">嵌入任务准备中…</div>
           ) : null}
-          {embedLog && (
-            <div className="summary-block" style={{ maxHeight: 160, overflow: "auto" }}>
-              <h4>嵌入日志</h4>
-              <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-                {embedLog.split("\n").filter(Boolean).slice(-30).join("\n")}
-              </div>
+          {embedRunning && embedJobId && (
+            <div className="stack-row" style={{ gap: 8, alignItems: "center" }}>
+              <button
+                className="ghost-btn"
+                onClick={async () => {
+                  if (!embedJobId) return;
+                  try {
+                    await stopEmbedJob(settings, embedJobId);
+                    setEmbedRunning(false);
+                    setEmbedStatus("已请求停止");
+                  } catch (err) {
+                    setEmbedStatus(err instanceof Error ? err.message : "停止失败");
+                  }
+                }}
+              >
+                停止嵌入
+              </button>
+              <span className="muted">
+                已嵌入 {embedProgress.embedded ?? 0}/{embedProgress.total ?? "?"}，跳过 {embedProgress.skipped ?? 0}
+              </span>
             </div>
           )}
         </div>
@@ -430,12 +472,20 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 <input type="checkbox" checked={summDryRun} onChange={(e) => setSummDryRun(e.target.checked)} />
                 dry-run
               </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={skipExistingSummaries}
+                  onChange={(e) => setSkipExistingSummaries(e.target.checked)}
+                  disabled={summRunning}
+                />
+                跳过已有摘要
+              </label>
             </div>
             <button
               className="ghost-btn"
               onClick={async () => {
                 setSummStatus("启动摘要…");
-                setSummLog("");
                 setSummProgress({});
                 setSummError(null);
                 setSummaryFinishedNotified(false);
@@ -452,7 +502,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                   const resp = await triggerSummarize(settings, {
                     limit: limitValue,
                     chunk_chars: 4000,
-                    skip_existing: true,
+                    skip_existing: skipExistingSummaries,
                     dry_run: summDryRun,
                   });
                   setSummJobId(resp.job_id);
@@ -532,14 +582,6 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               </span>
             </div>
           )}
-          {summLog && (
-            <div className="summary-block" style={{ maxHeight: 160, overflow: "auto" }}>
-              <h4>摘要日志</h4>
-              <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-                {summLog.split("\n").filter(Boolean).slice(-30).join("\n")}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="stack-row">
@@ -555,13 +597,13 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               }
             }}
           >
-            获取切片/摘要统计
+            获取切片/摘要/嵌入统计
           </button>
           {statsError && <span className="pill warn">{statsError}</span>}
         </div>
 
         {stats && (
-          <div className="summary-block" style={{ maxHeight: 200, overflow: "auto" }}>
+          <div className="summary-block" style={{ maxHeight: 220, overflow: "auto" }}>
             <h4>统计</h4>
             <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
               <span>PDF 总数: {stats.pdf_count}</span>
@@ -571,6 +613,13 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               <span>未切片的 PDF 数: {stats.missing_pdfs}</span>
               <span>已有摘要的论文数: {stats.papers_with_summary}</span>
               <span>缺少摘要的论文数: {stats.missing_summary}</span>
+              <span>Chunk 总数: {stats.chunks_total ?? "—"}</span>
+              {stats.embed_estimate ? (
+                <span>
+                  向量库进度: {stats.embed_estimate.embedded_count}/{stats.chunks_total ?? "?"} （{stats.embed_estimate.collection}）
+                </span>
+              ) : null}
+              {stats.embed_estimate ? null : <span className="muted">无嵌入统计</span>}
             </div>
             {stats.sample_missing?.length > 0 && (
               <div style={{ marginTop: 6 }}>

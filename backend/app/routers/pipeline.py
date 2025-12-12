@@ -2,6 +2,7 @@ import os
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy import func
 from pydantic import BaseModel
 
 from sqlmodel import Session, select
@@ -17,10 +18,14 @@ from backend.app.services.pipeline import (
     start_embed_job,
     get_embed_status,
     stop_process_pdfs_job,
+    stop_embed_job,
+    embed_jobs,
 )
 from backend.scripts.dedupe_attachments import dedupe as dedupe_attachments
 from backend.scripts.summarize_papers import process_papers as summarize_papers
 from backend.app.routers.config import read_config
+from chromadb import Client
+from chromadb.config import Settings
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -30,6 +35,10 @@ class ProcessPdfsRequest(BaseModel):
     overlap: int = 200
     limit: Optional[int] = None
     skip_existing: bool = True
+
+
+class JobStopRequest(BaseModel):
+    job_id: str
 
 
 @router.post("/process_pdfs/start")
@@ -50,8 +59,8 @@ def process_pdfs_status(job_id: str = Query(..., description="Job ID from /start
 
 
 @router.post("/process_pdfs/stop")
-def process_pdfs_stop(job_id: str):
-    status = stop_process_pdfs_job(job_id)
+def process_pdfs_stop(req: JobStopRequest):
+    status = stop_process_pdfs_job(req.job_id)
     if "error" in status:
         raise HTTPException(status_code=404, detail=status["error"])
     return status
@@ -78,6 +87,11 @@ class EmbedRequest(BaseModel):
     embed_base_url: Optional[str] = None
     embed_model: Optional[str] = None
     embed_api_key: Optional[str] = None
+    skip_existing: bool = True
+
+
+class JobStopRequest(BaseModel):
+    job_id: str
 
 
 @router.post("/embed_chunks/start")
@@ -99,6 +113,7 @@ def embed_chunks_start(req: EmbedRequest):
         collection=req.collection,
         persist_dir=req.persist_dir,
         batch_size=req.batch_size,
+        skip_existing=req.skip_existing,
     )
     return {"job_id": job_id}
 
@@ -106,6 +121,14 @@ def embed_chunks_start(req: EmbedRequest):
 @router.get("/embed_chunks/status")
 def embed_chunks_status(job_id: str = Query(...)):
     status = get_embed_status(job_id)
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+    return status
+
+
+@router.post("/embed_chunks/stop")
+def embed_chunks_stop(req: JobStopRequest):
+    status = stop_embed_job(req.job_id)
     if "error" in status:
         raise HTTPException(status_code=404, detail=status["error"])
     return status
@@ -138,8 +161,8 @@ def summarize_status(job_id: str = Query(...)):
 
 
 @router.post("/summarize/stop")
-def summarize_stop(job_id: str):
-    status = stop_summarize_job(job_id)
+def summarize_stop(req: JobStopRequest):
+    status = stop_summarize_job(req.job_id)
     if "error" in status:
         raise HTTPException(status_code=404, detail=status["error"])
     return status
@@ -173,6 +196,47 @@ def pipeline_stats(session: Session = Depends(get_db_session), sample_missing: i
     papers_with_summary = {row.paper_id for row in summary_rows}
     missing_summary = len(papers_with_pdf - papers_with_summary)
 
+    embed_snapshot = None
+    embed_list = []
+    if embed_jobs:
+        # pick latest job
+        last_job_id = list(embed_jobs.keys())[-1]
+        snap = embed_jobs.get(last_job_id)
+        if snap:
+            embed_snapshot = {
+                "job_id": last_job_id,
+                "running": snap.running,
+                "returncode": snap.returncode,
+                "stats": snap.stats,
+                "last_message": snap.last_message,
+            }
+        for jid, st in embed_jobs.items():
+            embed_list.append(
+                {
+                    "job_id": jid,
+                    "running": st.running,
+                    "returncode": st.returncode,
+                    "stats": st.stats,
+                    "last_message": st.last_message,
+                }
+            )
+    total_chunks_db = session.exec(select(func.count()).select_from(Chunk)).one()
+    # Estimate embedded count from Chroma collection (non-fatal).
+    embed_estimate = None
+    try:
+        cfg = read_config(session)
+        persist_dir = cfg.get("CHROMA_PERSIST_DIR") or "./chroma_store"
+        collection_name = cfg.get("CHROMA_COLLECTION") or "paper_chunks"
+        client = Client(Settings(is_persistent=True, persist_directory=persist_dir))
+        collection = client.get_or_create_collection(collection_name)
+        embed_estimate = {
+            "persist_dir": persist_dir,
+            "collection": collection_name,
+            "embedded_count": collection.count(),
+        }
+    except Exception:
+        embed_estimate = None
+
     return {
         "pdf_count": pdf_count,
         "papers_with_pdf": len(papers_with_pdf),
@@ -183,6 +247,10 @@ def pipeline_stats(session: Session = Depends(get_db_session), sample_missing: i
         "summary_rows": len(summary_rows),
         "papers_with_summary": len(papers_with_summary),
         "missing_summary": missing_summary,
+        "embed": embed_snapshot,
+        "embed_jobs": embed_list,
+        "embed_estimate": embed_estimate,
+        "chunks_total": total_chunks_db,
     }
 
 

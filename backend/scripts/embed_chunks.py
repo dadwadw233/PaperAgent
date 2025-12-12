@@ -32,10 +32,14 @@ def embed_chunks(
     cfg: Dict[str, str],
     batch_size: int = 16,
     progress_cb=None,
+    skip_existing: bool = True,
+    stop_event=None,
 ) -> int:
     client = get_chroma_client(persist_dir)
     collection = client.get_or_create_collection(collection_name)
     inserted = 0
+    skipped = 0
+    effective_total = len(chunks)
 
     def embed_texts(texts: List[str]) -> List[List[float]]:
         headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
@@ -49,10 +53,36 @@ def embed_chunks(
 
     total = len(chunks)
     for start in range(0, total, batch_size):
+        if stop_event and stop_event.is_set():
+            break
         batch = chunks[start : start + batch_size]
         texts = [c.content for c in batch]
-        embeddings = embed_texts(texts)
         ids = [f"chunk-{c.id}" for c in batch]
+        if skip_existing:
+            existing = collection.get(ids=ids)
+            existing_ids = set(existing.get("ids", [])) if existing else set()
+            if existing_ids:
+                filtered = [(c, t, i) for c, t, i in zip(batch, texts, ids) if i not in existing_ids]
+                skipped_now = len(batch) - len(filtered)
+                skipped += skipped_now
+                effective_total -= skipped_now
+                batch = [c for c, _, _ in filtered]
+                texts = [t for _, t, _ in filtered]
+                ids = [i for _, _, i in filtered]
+        if not batch:
+            if progress_cb:
+                progress_cb(
+                    {
+                        "stage": "embedding",
+                        "embedded": inserted,
+                        "total_chunks": max(effective_total, 0),
+                        "embedded_skipped": skipped,
+                        "batch": 0,
+                        "last_chunk_id": None,
+                    }
+                )
+            continue
+        embeddings = embed_texts(texts)
         metadatas = [
             {
                 "paper_id": c.paper_id,
@@ -69,7 +99,8 @@ def embed_chunks(
                 {
                     "stage": "embedding",
                     "embedded": inserted,
-                    "total": total,
+                    "embedded_skipped": skipped,
+                    "total_chunks": max(effective_total, 0),
                     "batch": len(batch),
                     "last_chunk_id": batch[-1].id if batch else None,
                 }

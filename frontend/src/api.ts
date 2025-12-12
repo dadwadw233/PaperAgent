@@ -161,6 +161,7 @@ export async function startEmbedJob(
     embed_base_url?: string;
     embed_model?: string;
     embed_api_key?: string;
+    skip_existing?: boolean;
   },
 ): Promise<{ job_id: string }> {
   const url = buildUrl(settings.apiBase, "/pipeline/embed_chunks/start");
@@ -185,6 +186,20 @@ export async function getEmbedStatus(
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Embed status failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export async function stopEmbedJob(settings: Settings, job_id: string): Promise<{ status: string }> {
+  const url = buildUrl(settings.apiBase, "/pipeline/embed_chunks/stop");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stop embed failed (${res.status}): ${text}`);
   }
   return res.json();
 }

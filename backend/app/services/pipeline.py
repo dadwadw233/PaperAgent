@@ -40,6 +40,7 @@ class JobStatus:
             "embedded": 0,
             "total_chunks": 0,
             "missing_files": 0,
+            "embedded_skipped": 0,
         }
         self.last_message: str = ""
         self._lock = threading.Lock()
@@ -93,6 +94,7 @@ class JobStatus:
                 "embedded",
                 "total_chunks",
                 "missing_files",
+                "embedded_skipped",
             ]:
                 if key in payload:
                     self.stats[key] = payload[key]
@@ -232,11 +234,19 @@ def stop_process_pdfs_job(job_id: str) -> Dict:
     return {"status": "stopped"}
 
 
-def start_embed_job(limit_chunks: Optional[int], collection: str, persist_dir: str, batch_size: int) -> str:
+def start_embed_job(
+    limit_chunks: Optional[int],
+    collection: str,
+    persist_dir: str,
+    batch_size: int,
+    skip_existing: bool = True,
+) -> str:
     job_id = str(uuid.uuid4())
     log_path = JOB_DIR / f"{job_id}.log"
     status = JobStatus()
     status.set_log(log_path)
+    stop_flag = threading.Event()
+    status.set_stop_event(stop_flag)
     embed_jobs[job_id] = status
 
     def runner():
@@ -256,7 +266,7 @@ def start_embed_job(limit_chunks: Optional[int], collection: str, persist_dir: s
                 with Session(engine) as session:
                     chunks = fetch_chunks(session, limit=limit_chunks)
                 total = len(chunks)
-                status.update({"stage": "starting", "total_chunks": total, "embedded": 0})
+                status.update({"stage": "starting", "total_chunks": total, "embedded": 0, "embedded_skipped": 0})
                 if total == 0:
                     status.stop(0)
                     return
@@ -267,6 +277,8 @@ def start_embed_job(limit_chunks: Optional[int], collection: str, persist_dir: s
                     cfg=cfg,
                     batch_size=batch_size,
                     progress_cb=progress_cb,
+                    skip_existing=skip_existing,
+                    stop_event=stop_flag,
                 )
                 status.stop(0)
             except Exception as exc:
@@ -292,3 +304,12 @@ def get_embed_status(job_id: str) -> Dict:
         "stats": status.stats,
         "last_message": status.last_message,
     }
+
+
+def stop_embed_job(job_id: str) -> Dict:
+    status = embed_jobs.get(job_id)
+    if not status:
+        return {"error": "job not found"}
+    status.signal_stop()
+    status.stop(-1)
+    return {"status": "stopped"}
