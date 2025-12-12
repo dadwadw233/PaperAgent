@@ -60,7 +60,7 @@ export async function updateConfig(
 
 export async function chatWithPaper(
   settings: Settings,
-  payload: { query: string; paper_id?: number; top_k?: number },
+  payload: { query: string; paper_id?: number; top_k?: number; use_embeddings?: boolean },
 ): Promise<{ answer: string; contexts: any[] }> {
   const url = buildUrl(settings.apiBase, "/chat");
   const res = await fetch(url, {
@@ -99,7 +99,7 @@ export async function uploadCsv(
 
 export async function runProcessPdfs(
   settings: Settings,
-  params: { chunk_size?: number; overlap?: number; limit?: number },
+  params: { chunk_size?: number; overlap?: number; limit?: number; skip_existing?: boolean },
 ): Promise<{ job_id: string }> {
   const url = buildUrl(settings.apiBase, "/pipeline/process_pdfs/start");
   const res = await fetch(url, {
@@ -127,6 +127,20 @@ export async function getProcessPdfsStatus(
   return res.json();
 }
 
+export async function stopProcessPdfs(settings: Settings, job_id: string): Promise<{ status: string }> {
+  const url = buildUrl(settings.apiBase, "/pipeline/process_pdfs/stop");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Stop process_pdfs failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 export async function dedupeAttachments(settings: Settings): Promise<{ status: string; result: any }> {
   const url = buildUrl(settings.apiBase, "/pipeline/dedupe_attachments");
   const res = await fetch(url, { method: "POST" });
@@ -137,12 +151,40 @@ export async function dedupeAttachments(settings: Settings): Promise<{ status: s
   return res.json();
 }
 
-export async function triggerEmbedChunks(settings: Settings): Promise<{ status: string }> {
-  const url = buildUrl(settings.apiBase, "/pipeline/embed_chunks");
-  const res = await fetch(url, { method: "POST" });
+export async function startEmbedJob(
+  settings: Settings,
+  params: {
+    limit_chunks?: number;
+    collection?: string;
+    persist_dir?: string;
+    batch_size?: number;
+    embed_base_url?: string;
+    embed_model?: string;
+    embed_api_key?: string;
+  },
+): Promise<{ job_id: string }> {
+  const url = buildUrl(settings.apiBase, "/pipeline/embed_chunks/start");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(params),
+  });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Embed failed (${res.status}): ${text}`);
+    throw new Error(`Embed start failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export async function getEmbedStatus(
+  settings: Settings,
+  job_id: string,
+): Promise<{ running: boolean; returncode: number | null; log: string; stats?: any; last_message?: string }> {
+  const url = buildUrl(settings.apiBase, "/pipeline/embed_chunks/status", { job_id });
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Embed status failed (${res.status}): ${text}`);
   }
   return res.json();
 }
