@@ -23,6 +23,7 @@ export const SearchBar: React.FC<Props> = ({
 }) => {
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
+      e.preventDefault();
       onSubmit();
     }
   };
