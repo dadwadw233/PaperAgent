@@ -15,8 +15,6 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
   const [query, setQuery] = useState("");
   const [itemType, setItemType] = useState("");
   const [searchField, setSearchField] = useState("title_abstract");
-  const [sortBy, setSortBy] = useState<"date" | "title">("date");
-  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [listLoading, setListLoading] = useState(false);
@@ -26,24 +24,6 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<PaperDetail | null>(null);
-
-  const sortPapers = (items: PaperListItem[]) => {
-    const sorted = [...items];
-    if (sortBy === "date") {
-      sorted.sort((a, b) => {
-        const yearA = a.year || 0;
-        const yearB = b.year || 0;
-        return sortOrder === "desc" ? yearB - yearA : yearA - yearB;
-      });
-    } else if (sortBy === "title") {
-      sorted.sort((a, b) => {
-        const titleA = (a.title || "").toLowerCase();
-        const titleB = (b.title || "").toLowerCase();
-        return sortOrder === "asc" ? titleA.localeCompare(titleB) : titleB.localeCompare(titleA);
-      });
-    }
-    return sorted;
-  };
 
   const runSearch = async () => {
     setListLoading(true);
@@ -56,11 +36,10 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
         offset: 0,
         search_fields: searchField || undefined,
       });
-      const sortedPapers = sortPapers(resp.items);
-      setPapers(sortedPapers);
+      setPapers(resp.items);
       setTotal(resp.total);
-      if (sortedPapers.length > 0) {
-        setSelectedId(sortedPapers[0].id);
+      if (resp.items.length > 0) {
+        setSelectedId(resp.items[0].id);
       } else {
         setSelectedId(null);
         setDetail(null);
@@ -85,8 +64,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
         offset: papers.length,
         search_fields: searchField || undefined,
       });
-      const sortedNew = sortPapers(resp.items);
-      setPapers((prev) => [...prev, ...sortedNew]);
+      setPapers((prev) => [...prev, ...resp.items]);
       setTotal(resp.total);
     } catch (err) {
       setListError(err instanceof Error ? err.message : "Failed to load list");
@@ -94,13 +72,6 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
       setLoadMoreLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (papers.length > 0) {
-      const sorted = sortPapers(papers);
-      setPapers(sorted);
-    }
-  }, [sortBy, sortOrder]);
 
   const loadDetail = async (id: number) => {
     setDetailLoading(true);
@@ -150,46 +121,6 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
         loading={listLoading}
       />
 
-      <div className="filter-bar">
-        <div className="filter-group">
-          <label className="filter-label">Sort by:</label>
-          <div className="button-group">
-            <button
-              className={`filter-btn ${sortBy === "date" ? "active" : ""}`}
-              onClick={() => setSortBy("date")}
-            >
-              Date
-            </button>
-            <button
-              className={`filter-btn ${sortBy === "title" ? "active" : ""}`}
-              onClick={() => setSortBy("title")}
-            >
-              Title
-            </button>
-          </div>
-        </div>
-        <div className="filter-group">
-          <label className="filter-label">Order:</label>
-          <div className="button-group">
-            <button
-              className={`filter-btn ${sortOrder === "desc" ? "active" : ""}`}
-              onClick={() => setSortOrder("desc")}
-            >
-              {sortBy === "date" ? "Newest" : "Z-A"}
-            </button>
-            <button
-              className={`filter-btn ${sortOrder === "asc" ? "active" : ""}`}
-              onClick={() => setSortOrder("asc")}
-            >
-              {sortBy === "date" ? "Oldest" : "A-Z"}
-            </button>
-          </div>
-        </div>
-        <div className="result-count">
-          {total} papers
-        </div>
-      </div>
-
       {listError && <div className="error-banner">{listError}</div>}
 
       <div className="papers-layout">
@@ -222,4 +153,3 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
     </div>
   );
 };
-

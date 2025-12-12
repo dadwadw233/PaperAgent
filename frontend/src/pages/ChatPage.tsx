@@ -9,7 +9,6 @@ interface ChatPageProps {
 
 export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   const [papers, setPapers] = useState<PaperListItem[]>([]);
-  const [allPapers, setAllPapers] = useState<PaperListItem[]>([]);
   const [selectedPaperId, setSelectedPaperId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,7 +25,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     setLoading(true);
     try {
       const resp = await fetchPapers(settings, { limit: LIMIT, offset: 0 });
-      setAllPapers(resp.items);
       setPapers(resp.items);
       setOffset(LIMIT);
       setHasMore(resp.items.length === LIMIT);
@@ -42,10 +40,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     setLoading(true);
     try {
       const resp = await fetchPapers(settings, { limit: LIMIT, offset });
-      setAllPapers(prev => [...prev, ...resp.items]);
-      if (!searchQuery) {
-        setPapers(prev => [...prev, ...resp.items]);
-      }
+      setPapers(prev => [...prev, ...resp.items]);
       setOffset(prev => prev + LIMIT);
       setHasMore(resp.items.length === LIMIT);
     } catch (err) {
@@ -61,7 +56,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     if (scrollHeight - scrollTop - clientHeight < 100 && hasMore && !loading) {
       loadMorePapers();
     }
-  }, [hasMore, loading]);
+  }, [hasMore, loading, offset]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -71,25 +66,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     }
   }, [handleScroll]);
 
-  // Enhanced search: title, authors, DOI, abstract
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setPapers(allPapers);
-      return;
-    }
+  const filteredPapers = papers.filter((p) =>
+    searchQuery ? p.title?.toLowerCase().includes(searchQuery.toLowerCase()) : true
+  );
 
-    const query = searchQuery.toLowerCase();
-    const filtered = allPapers.filter((p) => {
-      return (
-        p.title?.toLowerCase().includes(query) ||
-        p.doi?.toLowerCase().includes(query) ||
-        p.key?.toLowerCase().includes(query)
-      );
-    });
-    setPapers(filtered);
-  }, [searchQuery, allPapers]);
-
-  const selectedPaper = selectedPaperId ? allPapers.find((p) => p.id === selectedPaperId) : null;
+  const selectedPaper = selectedPaperId ? papers.find((p) => p.id === selectedPaperId) : null;
 
   return (
     <div className="page-container">
@@ -97,7 +78,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
         <div>
           <h1 className="page-title">Chat with Papers</h1>
           <p className="page-subtitle">
-            {searchQuery ? `${papers.length} papers found` : `${allPapers.length} papers loaded`}
+            {searchQuery ? `${filteredPapers.length} papers found` : `${papers.length} papers loaded`}
           </p>
         </div>
       </div>
@@ -117,7 +98,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
               <input
                 type="text"
                 className="search-box"
-                placeholder="Search by title, DOI, or key..."
+                placeholder="Search by title..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -142,10 +123,10 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
 
             <div className="paper-select-list" ref={listRef}>
               {loading && papers.length === 0 && <div className="empty">Loading papers...</div>}
-              {!loading && papers.length === 0 && (
+              {!loading && filteredPapers.length === 0 && (
                 <div className="empty">No papers found</div>
               )}
-              {papers.map((paper, idx) => (
+              {filteredPapers.map((paper, idx) => (
                 <div
                   key={paper.id}
                   className={`card compact ${selectedPaperId === paper.id ? "active" : ""}`}
