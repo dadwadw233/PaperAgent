@@ -62,9 +62,16 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   const [summProgress, setSummProgress] = useState<{
     processed?: number;
     total?: number;
+    skipped?: number;
     errors?: number;
   }>({});
   const [summError, setSummError] = useState<string | null>(null);
+  const [summResult, setSummResult] = useState<{
+    processed: number;
+    skipped: number;
+    errors: number;
+    total: number;
+  } | null>(null);
 
   // Stats State
   const [stats, setStats] = useState<PipelineStats | null>(null);
@@ -211,6 +218,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
 
   const runSummarization = async () => {
     setSummError(null);
+    setSummResult(null);
     setSummProgress({});
     try {
       const resp = await triggerSummarize(settings, {
@@ -233,10 +241,12 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
         const status = await getSummarizeStatus(settings, jid);
         const statsPayload = status.stats || {};
         const processedCount = statsPayload.processed_papers ?? statsPayload.processed ?? 0;
-        const totalCount = statsPayload.total_papers || statsPayload.papers_with_pdf || processedCount;
+        const totalCount = statsPayload.total_papers || processedCount;
+        const skippedCount = statsPayload.skipped ?? 0;
         setSummProgress({
           processed: processedCount,
           total: totalCount,
+          skipped: skippedCount,
           errors: statsPayload.errors ?? 0,
         });
         setSummRunning(status.running);
@@ -245,6 +255,12 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
           if (status.returncode && status.returncode !== 0) {
             setSummError(`Summarization failed (exit code: ${status.returncode})`);
           } else {
+            setSummResult({
+              processed: processedCount,
+              skipped: skippedCount,
+              errors: statsPayload.errors ?? 0,
+              total: totalCount,
+            });
             onSummaryFinished?.();
           }
           loadStats();
@@ -442,6 +458,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
               <div className="summary-progress-meta" style={{ marginTop: 8 }}>
                 <span>Processed: {summProgress.processed || 0}/{summProgress.total}</span>
                 <span>Errors: {summProgress.errors || 0}</span>
+                {summProgress.skipped ? <span>Skipped: {summProgress.skipped}</span> : null}
               </div>
             </div>
           ) : null}
@@ -494,6 +511,11 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                 </button>
               )}
             </div>
+            {!summRunning && summResult && !summError && (
+              <div className="success-banner">
+                Summarization finished. Processed {summResult.processed}/{summResult.total}, skipped {summResult.skipped}, errors {summResult.errors}.
+              </div>
+            )}
             {summError && <div className="error-banner">{summError}</div>}
           </div>
         </div>

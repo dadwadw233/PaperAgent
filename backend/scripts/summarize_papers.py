@@ -4,6 +4,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, init_db
@@ -165,10 +166,24 @@ def process_papers(
     engine = create_db_engine()
     init_db(engine)
     with Session(engine) as session:
-        q = select(Paper).where(Paper.is_paper == True).order_by(Paper.id)
+        base_q = select(Paper).where(Paper.is_paper == True)
+        library_total = session.exec(select(func.count()).select_from(Paper).where(Paper.is_paper == True)).one()
+
+        skipped_existing = 0
+        if skip_existing:
+            # Count how many papers already have summaries, using a DB-level NOT IN subquery
+            to_process_count = session.exec(
+                select(func.count())
+                .select_from(Paper)
+                .where(Paper.is_paper == True, ~Paper.id.in_(select(Summary.paper_id)))
+            ).one()
+            skipped_existing = max(library_total - to_process_count, 0)
+            base_q = base_q.where(~Paper.id.in_(select(Summary.paper_id)))
+
+        base_q = base_q.order_by(Paper.id)
         if limit:
-            q = q.limit(limit)
-        papers = session.exec(q).all()
+            base_q = base_q.limit(limit)
+        papers = session.exec(base_q).all()
         total_papers = len(papers)
         if progress_cb:
             progress_cb(
@@ -177,6 +192,7 @@ def process_papers(
                     "total_papers": total_papers,
                     "processed": 0,
                     "processed_papers": 0,
+                    "skipped": skipped_existing,
                     "errors": 0,
                 }
             )
@@ -190,6 +206,7 @@ def process_papers(
                             "stage": "stopped",
                             "processed": processed,
                             "processed_papers": processed,
+                            "skipped": skipped_existing,
                             "errors": errors,
                             "total_papers": total_papers,
                             "current_paper_id": paper.id,
@@ -197,10 +214,6 @@ def process_papers(
                         }
                     )
                 break
-            if skip_existing:
-                existing = session.exec(select(Summary).where(Summary.paper_id == paper.id)).first()
-                if existing:
-                    continue
             abstract = paper.abstract or ""
             context = fetch_context(session, paper.id, chunk_chars)
             prompt = build_prompt(paper.title or "(untitled)", abstract, context)
@@ -218,6 +231,7 @@ def process_papers(
                             "error": str(exc),
                             "processed": processed,
                             "processed_papers": processed,
+                            "skipped": skipped_existing,
                             "errors": errors,
                             "total_papers": total_papers,
                             "current_paper_id": paper.id,
@@ -236,6 +250,7 @@ def process_papers(
                             "paper_title": paper.title,
                             "processed": processed,
                             "processed_papers": processed,
+                            "skipped": skipped_existing,
                             "errors": errors,
                             "total_papers": total_papers,
                             "current_paper_id": paper.id,
@@ -256,11 +271,12 @@ def process_papers(
                         "processed": processed,
                         "processed_papers": processed,
                         "errors": errors,
-                            "total_papers": total_papers,
-                            "current_paper_id": paper.id,
-                            "current_paper_title": paper.title,
-                        }
-                    )
+                        "skipped": skipped_existing,
+                        "total_papers": total_papers,
+                        "current_paper_id": paper.id,
+                        "current_paper_title": paper.title,
+                    }
+                )
     print(f"Done. processed={processed}")
     if progress_cb:
         progress_cb(
@@ -268,8 +284,10 @@ def process_papers(
                 "stage": "finished",
                 "processed": processed,
                 "processed_papers": processed,
+                "skipped": skipped_existing,
                 "errors": errors,
                 "total_papers": total_papers,
+                "library_total": library_total,
             }
         )
 
