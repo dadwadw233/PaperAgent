@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
     paper_id: Optional[int] = None
     top_k: int = 4
     use_embeddings: bool = False
+    send_full_text: bool = False
+    max_chunks: Optional[int] = None
 
 
 def get_db_session():
@@ -119,6 +121,20 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     contexts: List[Dict] = []
     source_collection = None
     persist_dir = None
+    # Determine chunk count and char limit
+    if req.send_full_text:
+        # Send all chunks when full text is requested
+        chunk_limit = 999999
+        char_limit = 999999
+    elif req.max_chunks is not None:
+        # Use user-specified chunk count
+        chunk_limit = max(1, req.max_chunks)
+        char_limit = 999999  # No char limit when using custom chunk count
+    else:
+        # Default behavior
+        chunk_limit = max(1, min(req.top_k, 10))
+        char_limit = 4000
+
     if req.use_embeddings:
         embed_cfg = ensure_embedding_cfg(cfg)
         persist_dir = cfg.get("CHROMA_PERSIST_DIR") or "./chroma_store"
@@ -130,7 +146,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         where = {"paper_id": req.paper_id} if req.paper_id else None
         result = collection.query(
             query_embeddings=[query_vec],
-            n_results=max(1, min(req.top_k, 10)),
+            n_results=chunk_limit if chunk_limit < 999999 else 100,
             where=where,
         )
         docs = result.get("documents", [[]])[0] if result else []
@@ -153,8 +169,8 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         contexts = build_context_from_chunks(
             session,
             paper_id=req.paper_id,
-            max_chars=4000,
-            max_chunks=max(1, min(req.top_k, 10)),
+            max_chars=char_limit,
+            max_chunks=chunk_limit,
         )
 
     context_text = "\n\n".join(

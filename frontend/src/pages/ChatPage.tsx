@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { fetchPapers } from "../api";
+import { fetchPapers, fetchPaperDetail } from "../api";
 import { ChatPanel } from "../components/ChatPanel";
-import { PaperListItem, Settings } from "../types";
+import { PaperListItem, PaperDetail, Settings } from "../types";
 
 interface ChatPageProps {
   settings: Settings;
@@ -10,6 +10,7 @@ interface ChatPageProps {
 export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [selectedPaperId, setSelectedPaperId] = useState<number | null>(null);
+  const [selectedPaperDetail, setSelectedPaperDetail] = useState<PaperDetail | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -20,6 +21,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   useEffect(() => {
     loadPapers(true);
   }, [settings.apiBase]);
+
+  useEffect(() => {
+    if (selectedPaperId) {
+      fetchPaperDetail(settings, selectedPaperId)
+        .then(detail => setSelectedPaperDetail(detail))
+        .catch(err => {
+          console.error("Failed to load paper detail:", err);
+          setSelectedPaperDetail(null);
+        });
+    } else {
+      setSelectedPaperDetail(null);
+    }
+  }, [selectedPaperId, settings.apiBase]);
 
   const loadPapers = async (reset = false, query = "") => {
     setLoading(true);
@@ -80,8 +94,6 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
       return () => list.removeEventListener('scroll', handleScroll);
     }
   }, [handleScroll]);
-
-  const selectedPaper = selectedPaperId ? papers.find((p) => p.id === selectedPaperId) : null;
 
   return (
     <div className="page-container">
@@ -177,16 +189,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
 
         <div className="chat-main-section">
           <ChatPanel
-            paper={selectedPaper ? {
-              ...selectedPaper,
-              authors: null,
-              abstract: null,
-              manual_tags: null,
-              automatic_tags: null,
-              summary: null,
-              tags: [],
-              attachments: []
-            } : null}
+            paper={selectedPaperDetail}
             settings={settings}
           />
         </div>

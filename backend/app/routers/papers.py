@@ -5,7 +5,7 @@ from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, get_session
-from backend.app.models import FileAttachment, Paper, Summary, Tag
+from backend.app.models import Chunk, FileAttachment, Paper, Summary, Tag
 
 
 router = APIRouter(prefix="/papers", tags=["papers"])
@@ -108,6 +108,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_db_session)):
     summary = session.exec(select(Summary).where(Summary.paper_id == paper_id)).first()
     tags = session.exec(select(Tag).where(Tag.paper_id == paper_id)).all()
     attachments = session.exec(select(FileAttachment).where(FileAttachment.paper_id == paper_id)).all()
+    chunks_count = session.exec(select(func.count()).select_from(Chunk).where(Chunk.paper_id == paper_id)).one()
     return {
         "id": paper.id,
         "key": paper.key,
@@ -128,4 +129,5 @@ def get_paper(paper_id: int, session: Session = Depends(get_db_session)):
         },
         "tags": [{"type": t.tag_type, "value": t.value} for t in tags],
         "attachments": [{"path": a.path, "type": a.attachment_type} for a in attachments],
+        "chunks_count": chunks_count,
     }

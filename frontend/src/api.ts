@@ -60,7 +60,7 @@ export async function updateConfig(
 
 export async function chatWithPaper(
   settings: Settings,
-  payload: { query: string; paper_id?: number; top_k?: number; use_embeddings?: boolean },
+  payload: { query: string; paper_id?: number; top_k?: number; use_embeddings?: boolean; send_full_text?: boolean; max_chunks?: number },
 ): Promise<{ answer: string; contexts: any[] }> {
   const url = buildUrl(settings.apiBase, "/chat");
   const res = await fetch(url, {

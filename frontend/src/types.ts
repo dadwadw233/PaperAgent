@@ -40,6 +40,7 @@ export interface PaperDetail extends PaperListItem {
   summary: SummaryPayload | null;
   tags: TagPayload[];
   attachments: AttachmentPayload[];
+  chunks_count: number;
 }
 
 export interface Settings {

@@ -18,6 +18,8 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [useEmbeddings, setUseEmbeddings] = useState(false);
+  const [sendFullText, setSendFullText] = useState(false);
+  const [maxChunks, setMaxChunks] = useState(4);
   const disabled = !paper;
 
   const send = async () => {
@@ -34,10 +36,25 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
         paper_id: paper?.id,
         top_k: 4,
         use_embeddings: useEmbeddings,
+        send_full_text: sendFullText,
+        max_chunks: sendFullText ? undefined : maxChunks,
       });
-      const ctxSummary = resp.contexts
-        ?.map((c: any, idx: number) => `[${idx + 1}] paper ${c.paper_id} seq ${c.seq}`)
-        ?.join(" ");
+      // Generate concise context summary
+      let ctxSummary = "";
+      if (resp.contexts && resp.contexts.length > 0) {
+        const count = resp.contexts.length;
+        if (count <= 5) {
+          // Show detailed list for small number of chunks
+          ctxSummary = resp.contexts
+            .map((c: any, idx: number) => `[${idx + 1}] seq ${c.seq}`)
+            .join(", ");
+        } else {
+          // Show concise summary for large number of chunks
+          const firstSeq = resp.contexts[0]?.seq;
+          const lastSeq = resp.contexts[count - 1]?.seq;
+          ctxSummary = `${count} chunks (seq ${firstSeq}-${lastSeq})`;
+        }
+      }
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: resp.answer + (ctxSummary ? `\n\n(Context: ${ctxSummary})` : "") },
@@ -55,6 +72,11 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span className="chat-title">Conversation</span>
           {loading && <span className="pill info">Processing...</span>}
+          {paper && paper.chunks_count !== undefined && (
+            <span className="pill" style={{ fontSize: "0.85em" }}>
+              {paper.chunks_count} chunks available
+            </span>
+          )}
         </div>
         {!paper && <span className="pill warn">Select a paper first</span>}
       </div>
@@ -69,6 +91,38 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
           <span>Use vector search</span>
         </label>
         <span className="muted">Retrieve relevant chunks by similarity (requires embeddings)</span>
+
+        <label className="checkbox-label" style={{ marginTop: "8px" }}>
+          <input
+            type="checkbox"
+            checked={sendFullText}
+            onChange={(e) => setSendFullText(e.target.checked)}
+            disabled={disabled || loading}
+          />
+          <span>Send full text</span>
+        </label>
+        <span className="muted">Send all chunks from the paper (may be very long)</span>
+
+        {!sendFullText && (
+          <div style={{ marginTop: "12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ minWidth: "100px" }}>Chunks: {maxChunks}</span>
+              <input
+                type="range"
+                min="1"
+                max={paper?.chunks_count || 50}
+                value={Math.min(maxChunks, paper?.chunks_count || 50)}
+                onChange={(e) => setMaxChunks(Number(e.target.value))}
+                disabled={disabled || loading}
+                style={{ flex: 1 }}
+              />
+            </label>
+            <span className="muted">
+              Adjust how many chunks to send (1-{paper?.chunks_count || 50}
+              {paper && ` total`})
+            </span>
+          </div>
+        )}
       </div>
       <div className="chat-messages">
         {messages.length === 0 && !paper && (
