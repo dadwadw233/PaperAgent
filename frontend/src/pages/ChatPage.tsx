@@ -16,6 +16,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<number | null>(null);
   const LIMIT = 50;
 
   useEffect(() => {
@@ -62,16 +63,22 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
   };
 
   const handleSearch = () => {
+    if (searchTimeoutRef.current !== null) {
+      window.clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
     loadPapers(true, searchQuery);
   };
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-    // Real-time search after 300ms delay
-    const timeoutId = setTimeout(() => {
+    if (searchTimeoutRef.current !== null) {
+      window.clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = window.setTimeout(() => {
       loadPapers(true, value);
+      searchTimeoutRef.current = null;
     }, 300);
-    return () => clearTimeout(timeoutId);
   };
 
   const loadMorePapers = () => {
@@ -94,6 +101,14 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
       return () => list.removeEventListener('scroll', handleScroll);
     }
   }, [handleScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current !== null) {
+        window.clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="page-container">
@@ -124,9 +139,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
                 placeholder="Search by title, authors, abstract..."
                 value={searchQuery}
                 onChange={(e) => {
-                  const newValue = e.target.value;
-                  setSearchQuery(newValue);
-                  handleSearchChange(newValue);
+                  handleSearchChange(e.target.value);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
