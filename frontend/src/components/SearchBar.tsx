@@ -43,8 +43,8 @@ export const SearchBar: React.FC<Props> = ({
         onChange={(e) => onItemTypeChange(e.target.value)}
       >
         <option value="">All types</option>
-        <option value="journalArticle">Journal</option>
-        <option value="conferencePaper">Conference</option>
+        <option value="journalarticle">Journal</option>
+        <option value="conferencepaper">Conference</option>
         <option value="preprint">Preprint</option>
         <option value="report">Report</option>
         <option value="book">Book</option>

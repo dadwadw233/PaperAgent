@@ -22,6 +22,10 @@ FIELD_COLUMN_MAP = {
 }
 
 
+def normalize_item_type(value: str) -> str:
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
 def parse_search_fields(raw: Optional[str]) -> List[str]:
     if not raw:
         return DEFAULT_SEARCH_FIELDS
@@ -76,7 +80,7 @@ def list_papers(
         if needs_summary_join:
             stmt = stmt.distinct()
     if item_type:
-        stmt = stmt.where(Paper.item_type == item_type)
+        stmt = stmt.where(Paper.item_type == normalize_item_type(item_type))
     total = session.exec(
         select(func.count()).select_from(stmt.subquery())
     ).one()
