@@ -29,7 +29,9 @@ def dedupe():
                 if obj:
                     session.delete(obj)
             session.commit()
-    print({"deleted": len(to_delete_ids)})
+    result = {"deleted": len(to_delete_ids)}
+    print(result)
+    return result
 
 
 if __name__ == "__main__":

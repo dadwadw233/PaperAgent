@@ -134,6 +134,15 @@ def upsert_summary_tags(session: Session, paper_id: int, model: str, result: Dic
         result.get("snarky_comment_en"), result.get("snarky_comment_zh")
     ) or normalize_text(result.get("snarky_comment"))
 
+    # Replace previous outputs so reruns update instead of duplicating rows.
+    existing_summaries = session.exec(select(Summary).where(Summary.paper_id == paper_id)).all()
+    for row in existing_summaries:
+        session.delete(row)
+    existing_tags = session.exec(select(Tag).where(Tag.paper_id == paper_id)).all()
+    for row in existing_tags:
+        session.delete(row)
+    session.flush()
+
     summary = Summary(
         paper_id=paper_id,
         model=model,
