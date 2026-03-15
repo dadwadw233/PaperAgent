@@ -25,6 +25,13 @@ def get_embedding_endpoint_config() -> Dict[str, str]:
     return {"base_url": base_url, "model": model, "api_key": api_key}
 
 
+def is_hnsw_load_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    if "error loading hnsw index" in text:
+        return True
+    return "hnsw" in text and "segment reader" in text
+
+
 def embed_chunks(
     collection_name: str,
     persist_dir: str,
@@ -34,12 +41,9 @@ def embed_chunks(
     progress_cb=None,
     skip_existing: bool = True,
     stop_event=None,
+    allow_hnsw_rebuild: bool = True,
 ) -> int:
     client = get_chroma_client(persist_dir)
-    collection = client.get_or_create_collection(collection_name)
-    inserted = 0
-    skipped = 0
-    effective_total = len(chunks)
 
     def embed_texts(texts: List[str]) -> List[List[float]]:
         headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
@@ -52,61 +56,90 @@ def embed_chunks(
         # Expect OpenAI-style response: {"data": [{"embedding": [...]}]}
         return [item["embedding"] for item in data["data"]]
 
+    recover_attempted = False
+    skip_existing_runtime = skip_existing
     total = len(chunks)
-    for start in range(0, total, batch_size):
-        if stop_event and stop_event.is_set():
-            break
-        batch = chunks[start : start + batch_size]
-        texts = [c.content for c in batch]
-        ids = [f"chunk-{c.id}" for c in batch]
-        if skip_existing:
-            existing = collection.get(ids=ids)
-            existing_ids = set(existing.get("ids", [])) if existing else set()
-            if existing_ids:
-                filtered = [(c, t, i) for c, t, i in zip(batch, texts, ids) if i not in existing_ids]
-                skipped_now = len(batch) - len(filtered)
-                skipped += skipped_now
-                effective_total -= skipped_now
-                batch = [c for c, _, _ in filtered]
-                texts = [t for _, t, _ in filtered]
-                ids = [i for _, _, i in filtered]
-        if not batch:
+    while True:
+        collection = client.get_or_create_collection(collection_name)
+        inserted = 0
+        skipped = 0
+        effective_total = len(chunks)
+        try:
+            for start in range(0, total, batch_size):
+                if stop_event and stop_event.is_set():
+                    break
+                batch = chunks[start : start + batch_size]
+                texts = [c.content for c in batch]
+                ids = [f"chunk-{c.id}" for c in batch]
+                if skip_existing_runtime:
+                    existing = collection.get(ids=ids)
+                    existing_ids = set(existing.get("ids", [])) if existing else set()
+                    if existing_ids:
+                        filtered = [(c, t, i) for c, t, i in zip(batch, texts, ids) if i not in existing_ids]
+                        skipped_now = len(batch) - len(filtered)
+                        skipped += skipped_now
+                        effective_total -= skipped_now
+                        batch = [c for c, _, _ in filtered]
+                        texts = [t for _, t, _ in filtered]
+                        ids = [i for _, _, i in filtered]
+                if not batch:
+                    if progress_cb:
+                        progress_cb(
+                            {
+                                "stage": "embedding",
+                                "embedded": inserted,
+                                "total_chunks": max(effective_total, 0),
+                                "embedded_skipped": skipped,
+                                "batch": 0,
+                                "last_chunk_id": None,
+                            }
+                        )
+                    continue
+                embeddings = embed_texts(texts)
+                metadatas = [
+                    {
+                        "paper_id": c.paper_id,
+                        "chunk_id": c.id,
+                        "source_path": c.source_path,
+                        "seq": c.seq,
+                    }
+                    for c in batch
+                ]
+                collection.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
+                inserted += len(batch)
+                if progress_cb:
+                    progress_cb(
+                        {
+                            "stage": "embedding",
+                            "embedded": inserted,
+                            "embedded_skipped": skipped,
+                            "total_chunks": max(effective_total, 0),
+                            "batch": len(batch),
+                            "last_chunk_id": batch[-1].id if batch else None,
+                        }
+                    )
+            return inserted
+        except Exception as exc:
+            if recover_attempted or not is_hnsw_load_error(exc):
+                raise
+            if not allow_hnsw_rebuild:
+                raise RuntimeError(
+                    "HNSW index load failed. Auto-rebuild is disabled for partial embedding runs "
+                    "(limit_chunks is set). Run a full embedding job (without limit_chunks) to rebuild."
+                ) from exc
             if progress_cb:
                 progress_cb(
                     {
-                        "stage": "embedding",
-                        "embedded": inserted,
-                        "total_chunks": max(effective_total, 0),
-                        "embedded_skipped": skipped,
-                        "batch": 0,
-                        "last_chunk_id": None,
+                        "stage": "rebuild_hnsw_index",
+                        "embedded": 0,
+                        "embedded_skipped": 0,
+                        "total_chunks": len(chunks),
+                        "error": str(exc)[:220],
                     }
                 )
-            continue
-        embeddings = embed_texts(texts)
-        metadatas = [
-            {
-                "paper_id": c.paper_id,
-                "chunk_id": c.id,
-                "source_path": c.source_path,
-                "seq": c.seq,
-            }
-            for c in batch
-        ]
-        collection.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=texts)
-        inserted += len(batch)
-        if progress_cb:
-            progress_cb(
-                {
-                    "stage": "embedding",
-                    "embedded": inserted,
-                    "embedded_skipped": skipped,
-                    "total_chunks": max(effective_total, 0),
-                    "batch": len(batch),
-                    "last_chunk_id": batch[-1].id if batch else None,
-                }
-            )
-    return inserted
+            client.delete_collection(collection_name)
+            recover_attempted = True
+            skip_existing_runtime = False
 
 
 def fetch_chunks(session: Session, limit: Optional[int] = None) -> List[Chunk]:
@@ -149,6 +182,7 @@ def main():
         chunks=chunks,
         cfg=cfg,
         batch_size=args.batch_size,
+        allow_hnsw_rebuild=args.limit_chunks is None,
     )
     print(json.dumps({"embedded": inserted, "collection": args.collection, "persist_dir": args.persist_dir}))
 

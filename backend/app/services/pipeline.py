@@ -495,6 +495,7 @@ def _run_embed_job(
                 progress_cb=progress_cb,
                 skip_existing=skip_existing,
                 stop_event=stop_flag,
+                allow_hnsw_rebuild=limit_chunks is None,
             )
             if stop_flag.is_set() or status.returncode == -1:
                 status.stop(-1)
