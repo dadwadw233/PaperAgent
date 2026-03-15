@@ -8,5 +8,7 @@ __pycache__/
 .DS_Store
 .pipeline_jobs/
 paper_agent.db
+paper_agent.db-shm
+paper_agent.db-wal
 chroma_store/
 My Library.csv
