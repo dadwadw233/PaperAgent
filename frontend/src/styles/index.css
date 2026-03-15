@@ -1125,6 +1125,7 @@ textarea:focus {
 .settings-row {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .settings-row label {
@@ -1138,6 +1139,9 @@ textarea:focus {
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 14px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .stack {
