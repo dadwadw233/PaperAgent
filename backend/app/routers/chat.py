@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, get_session
-from backend.app.models import Chunk
+from backend.app.models import Chunk, Paper, Summary
 from backend.app.routers.config import read_config
 from backend.app.services.http_client import ExternalServiceError, post_json_with_retry
 
@@ -18,6 +18,42 @@ from backend.app.services.http_client import ExternalServiceError, post_json_wit
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+ENGLISH_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "do",
+    "does",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+}
+VECTOR_BACKEND_DISABLED_UNTIL = 0.0
+VECTOR_BACKEND_DISABLED_REASON = ""
+VECTOR_BACKEND_COOLDOWN_SECONDS = 900
 
 
 class ChatRequest(BaseModel):
@@ -43,6 +79,17 @@ def get_db_session():
 
 def get_chroma_client(persist_directory: str) -> Client:
     return Client(Settings(is_persistent=True, persist_directory=persist_directory))
+
+
+def vector_backend_disabled() -> bool:
+    return time.time() < VECTOR_BACKEND_DISABLED_UNTIL
+
+
+def mark_vector_backend_failed(reason: str):
+    global VECTOR_BACKEND_DISABLED_UNTIL
+    global VECTOR_BACKEND_DISABLED_REASON
+    VECTOR_BACKEND_DISABLED_UNTIL = time.time() + VECTOR_BACKEND_COOLDOWN_SECONDS
+    VECTOR_BACKEND_DISABLED_REASON = reason[:220]
 
 
 def ensure_embedding_cfg(cfg: Dict[str, str]) -> Dict[str, str]:
@@ -144,8 +191,23 @@ def tokenize_for_rerank(text: str) -> List[str]:
     return re.findall(r"[a-zA-Z0-9\u4e00-\u9fff]+", (text or "").lower())
 
 
+def normalize_query_tokens(query: str) -> List[str]:
+    raw = tokenize_for_rerank(query)
+    filtered: List[str] = []
+    for token in raw:
+        if token in ENGLISH_STOPWORDS:
+            continue
+        if token.isdigit():
+            continue
+        if len(token) <= 1:
+            continue
+        if token not in filtered:
+            filtered.append(token)
+    return filtered
+
+
 def local_rerank_score(query: str, text: str) -> float:
-    q_tokens = tokenize_for_rerank(query)
+    q_tokens = normalize_query_tokens(query)
     if not q_tokens:
         return 0.0
     q_set = set(q_tokens)
@@ -207,14 +269,17 @@ def fetch_lexical_contexts(
     candidate_k: int,
     paper_filter_id: Optional[int],
 ) -> Dict[str, Any]:
-    tokens = [token for token in tokenize_for_rerank(query) if len(token) >= 2][:8]
-    scan_limit = max(candidate_k * 25, 200)
+    tokens = normalize_query_tokens(query)[:10]
+    scan_limit = max(candidate_k * 35, 400 if paper_filter_id else 250)
     stmt = select(Chunk)
     if paper_filter_id:
         stmt = stmt.where(Chunk.paper_id == paper_filter_id)
     if tokens:
         stmt = stmt.where(or_(*[Chunk.content.contains(token) for token in tokens]))
-    stmt = stmt.order_by(Chunk.created_at.desc()).limit(scan_limit)
+    if paper_filter_id:
+        stmt = stmt.order_by(Chunk.seq.asc()).limit(scan_limit)
+    else:
+        stmt = stmt.order_by(Chunk.created_at.desc()).limit(scan_limit)
     rows: List[Chunk] = session.exec(stmt).all()
 
     contexts: List[Dict[str, Any]] = []
@@ -265,6 +330,39 @@ def fetch_lexical_contexts(
     }
 
 
+def fetch_paper_summary_context(
+    session: Session,
+    paper_id: int,
+    query: str,
+) -> Optional[Dict[str, Any]]:
+    paper = session.exec(select(Paper).where(Paper.id == paper_id)).first()
+    summary = (
+        session.exec(select(Summary).where(Summary.paper_id == paper_id).order_by(Summary.created_at.desc()))
+        .first()
+    )
+    parts: List[str] = []
+    if paper and paper.title:
+        parts.append(f"Title: {paper.title}")
+    if summary and summary.one_liner:
+        parts.append(f"One-liner summary: {summary.one_liner}")
+    if summary and summary.long_summary:
+        parts.append(f"Long summary excerpt: {(summary.long_summary or '')[:1200]}")
+    elif paper and paper.abstract:
+        parts.append(f"Abstract excerpt: {(paper.abstract or '')[:1200]}")
+    if not parts:
+        return None
+    text = "\n".join(parts)
+    return {
+        "paper_id": paper_id,
+        "chunk_id": None,
+        "seq": -1,
+        "distance": None,
+        "vector_score": min(1.5, 0.2 + local_rerank_score(query, text)),
+        "rerank_score": 0.0,
+        "text": text,
+    }
+
+
 def sort_and_select_contexts(
     query: str,
     contexts: List[Dict[str, Any]],
@@ -296,13 +394,19 @@ def sort_and_select_contexts(
     return selected
 
 
-def apply_context_budget(contexts: List[Dict[str, Any]], char_budget: int = 12000) -> List[Dict[str, Any]]:
+def apply_context_budget(
+    contexts: List[Dict[str, Any]],
+    char_budget: int = 12000,
+    per_chunk_char_cap: int = 1800,
+) -> List[Dict[str, Any]]:
     total = 0
     trimmed: List[Dict[str, Any]] = []
     for row in contexts:
         if total >= char_budget:
             break
         text = row.get("text") or ""
+        if per_chunk_char_cap > 0 and len(text) > per_chunk_char_cap:
+            text = text[:per_chunk_char_cap]
         remain = char_budget - total
         if len(text) > remain:
             text = text[:remain]
@@ -341,7 +445,75 @@ def citations_are_valid(answer: str, citation_count: int) -> bool:
     return min(refs) >= 1 and max(refs) <= citation_count
 
 
-def call_chat(model_cfg: Dict[str, str], system_prompt: str, user_prompt: str) -> str:
+def repair_citations(answer: str, citation_count: int) -> str:
+    if citation_count <= 0:
+        return answer
+
+    def _replace(match: re.Match[str]) -> str:
+        idx = int(match.group(1))
+        if idx < 1 or idx > citation_count:
+            return "[1]"
+        return f"[{idx}]"
+
+    normalized = CITATION_PATTERN.sub(_replace, answer or "").strip()
+    if not normalized:
+        return normalized
+    paragraphs = [p.strip() for p in normalized.split("\n\n") if p.strip()]
+    patched: List[str] = []
+    for paragraph in paragraphs:
+        if not CITATION_PATTERN.search(paragraph):
+            paragraph = f"{paragraph} [1]"
+        patched.append(paragraph)
+    return "\n\n".join(patched)
+
+
+def get_prompt_controls(opts: Dict[str, Any], query: str) -> Dict[str, int]:
+    query_len = len(query or "")
+    if opts["scope"] == "paper":
+        char_budget = 9000
+        per_chunk_char_cap = 1500
+        max_tokens = 240
+        llm_timeout_seconds = 7
+    else:
+        char_budget = 7000
+        per_chunk_char_cap = 1100
+        max_tokens = 180
+        llm_timeout_seconds = 6
+    if query_len > 160:
+        char_budget += 800
+        max_tokens += 40
+    return {
+        "char_budget": min(12000, char_budget),
+        "per_chunk_char_cap": per_chunk_char_cap,
+        "max_tokens": max_tokens,
+        "llm_timeout_seconds": llm_timeout_seconds,
+    }
+
+
+def build_fallback_answer(contexts: List[Dict[str, Any]]) -> str:
+    if not contexts:
+        return "I am unsure because no reliable context was retrieved."
+    lines: List[str] = []
+    for idx, row in enumerate(contexts[:2], start=1):
+        text = " ".join((row.get("text") or "").split())
+        if len(text) > 220:
+            text = text[:220].rstrip() + "..."
+        if not text:
+            continue
+        prefix = "Evidence suggests" if idx == 1 else "Additional evidence"
+        lines.append(f"{prefix}: {text} [{idx}]")
+    if not lines:
+        return "I am unsure because context snippets are empty."
+    return "\n\n".join(lines)
+
+
+def call_chat(
+    model_cfg: Dict[str, str],
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 320,
+    timeout_seconds: int = 8,
+) -> str:
     base_url = model_cfg.get("LLM_BASE_URL") or ""
     model = model_cfg.get("LLM_MODEL") or ""
     api_key = model_cfg.get("LLM_API_KEY") or ""
@@ -359,10 +531,18 @@ def call_chat(model_cfg: Dict[str, str], system_prompt: str, user_prompt: str) -
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.1,
+        "max_tokens": max_tokens,
         "stream": False,
     }
     try:
-        data = post_json_with_retry(url, headers=headers, payload=payload, timeout=120, retries=2)
+        data = post_json_with_retry(
+            url,
+            headers=headers,
+            payload=payload,
+            timeout=max(3, timeout_seconds),
+            retries=0,
+            backoff_seconds=0.2,
+        )
     except ExternalServiceError as exc:
         raise HTTPException(status_code=502, detail=f"LLM request failed ({exc.category}): {exc.message}") from exc
     try:
@@ -385,6 +565,9 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     persist_dir = None
     retrieval_backend = "direct_chunks" if opts["legacy_direct_mode"] else "vector"
     retrieval_fallback_reason: Optional[str] = None
+    llm_fallback_used = False
+    llm_fallback_reason: Optional[str] = None
+    prompt_controls = get_prompt_controls(opts, req.query)
 
     if opts["legacy_direct_mode"]:
         contexts = build_context_from_chunks(
@@ -394,26 +577,45 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             max_chunks=opts["final_k"],
         )
     else:
-        try:
-            embed_cfg = ensure_embedding_cfg(cfg)
-            search_result = fetch_embedding_contexts(
-                cfg={**cfg, **embed_cfg},
-                query=req.query,
-                candidate_k=opts["candidate_k"],
-                paper_filter_id=opts["paper_id"],
-            )
-        except Exception as exc:
+        if vector_backend_disabled():
             search_result = fetch_lexical_contexts(
                 session=session,
                 query=req.query,
                 candidate_k=opts["candidate_k"],
                 paper_filter_id=opts["paper_id"],
             )
-            retrieval_backend = "lexical_fallback"
-            retrieval_fallback_reason = str(exc)[:220]
+            retrieval_backend = "lexical_fallback_cached"
+            retrieval_fallback_reason = VECTOR_BACKEND_DISABLED_REASON
+        else:
+            try:
+                embed_cfg = ensure_embedding_cfg(cfg)
+                search_result = fetch_embedding_contexts(
+                    cfg={**cfg, **embed_cfg},
+                    query=req.query,
+                    candidate_k=opts["candidate_k"],
+                    paper_filter_id=opts["paper_id"],
+                )
+            except Exception as exc:
+                mark_vector_backend_failed(str(exc))
+                search_result = fetch_lexical_contexts(
+                    session=session,
+                    query=req.query,
+                    candidate_k=opts["candidate_k"],
+                    paper_filter_id=opts["paper_id"],
+                )
+                retrieval_backend = "lexical_fallback"
+                retrieval_fallback_reason = str(exc)[:220]
         contexts = search_result["contexts"]
         source_collection = search_result["source_collection"]
         persist_dir = search_result["persist_dir"]
+        if opts["scope"] == "paper" and opts["paper_id"]:
+            summary_context = fetch_paper_summary_context(
+                session=session,
+                paper_id=opts["paper_id"],
+                query=req.query,
+            )
+            if summary_context:
+                contexts = [summary_context, *contexts]
 
     contexts = sort_and_select_contexts(
         query=req.query,
@@ -422,7 +624,11 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         rerank=opts["rerank"] and not opts["legacy_direct_mode"],
         scope=opts["scope"],
     )
-    contexts = apply_context_budget(contexts, char_budget=12000)
+    contexts = apply_context_budget(
+        contexts,
+        char_budget=prompt_controls["char_budget"],
+        per_chunk_char_cap=prompt_controls["per_chunk_char_cap"],
+    )
     citations = build_citations(contexts)
     retrieval_ms = int((time.perf_counter() - retrieval_started) * 1000)
 
@@ -447,19 +653,55 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         f"Question: {req.query}\n\n"
         "Context snippets:\n"
         f"{context_text}\n\n"
-        "Return a concise answer with explicit inline citations."
+        "Return a concise answer with explicit inline citations. "
+        "Use no more than 2 short paragraphs and keep the total within 5 sentences."
     )
 
     generation_started = time.perf_counter()
-    answer = call_chat(cfg, base_system_prompt, user_prompt)
+    try:
+        answer = call_chat(
+            cfg,
+            base_system_prompt,
+            user_prompt,
+            max_tokens=prompt_controls["max_tokens"],
+            timeout_seconds=prompt_controls["llm_timeout_seconds"],
+        )
+    except HTTPException as exc:
+        answer = build_fallback_answer(contexts)
+        llm_fallback_used = True
+        llm_fallback_reason = str(exc.detail)[:220]
+
     require_citations = opts["require_citations"] and len(citations) > 0
+    citation_repair_applied = False
+    if require_citations and not llm_fallback_used and not citations_are_valid(answer, len(citations)):
+        try:
+            answer = call_chat(
+                cfg,
+                strict_system_prompt,
+                user_prompt,
+                max_tokens=prompt_controls["max_tokens"],
+                timeout_seconds=prompt_controls["llm_timeout_seconds"],
+            )
+        except HTTPException as exc:
+            answer = build_fallback_answer(contexts)
+            llm_fallback_used = True
+            llm_fallback_reason = str(exc.detail)[:220]
+
     if require_citations and not citations_are_valid(answer, len(citations)):
-        answer = call_chat(cfg, strict_system_prompt, user_prompt)
+        repaired_answer = repair_citations(answer, len(citations))
+        if citations_are_valid(repaired_answer, len(citations)):
+            answer = repaired_answer
+            citation_repair_applied = True
     if require_citations and not citations_are_valid(answer, len(citations)):
         raise HTTPException(
             status_code=502,
             detail="LLM did not produce valid citations after retry.",
         )
+    if require_citations:
+        normalized_answer = repair_citations(answer, len(citations))
+        if normalized_answer != answer:
+            citation_repair_applied = True
+            answer = normalized_answer
     generation_ms = int((time.perf_counter() - generation_started) * 1000)
     total_ms = int((time.perf_counter() - started) * 1000)
 
@@ -472,8 +714,14 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         "rerank_enabled": opts["rerank"] and not opts["legacy_direct_mode"],
         "retrieval_backend": retrieval_backend,
         "retrieval_fallback_reason": retrieval_fallback_reason,
+        "citation_repair_applied": citation_repair_applied,
+        "llm_fallback_used": llm_fallback_used,
+        "llm_fallback_reason": llm_fallback_reason,
+        "answer_max_tokens": prompt_controls["max_tokens"],
+        "llm_timeout_seconds": prompt_controls["llm_timeout_seconds"],
         "legacy_direct_mode": opts["legacy_direct_mode"],
-        "context_char_budget": 12000,
+        "context_char_budget": prompt_controls["char_budget"],
+        "context_per_chunk_char_cap": prompt_controls["per_chunk_char_cap"],
         "timings_ms": {
             "retrieval": retrieval_ms,
             "generation": generation_ms,
