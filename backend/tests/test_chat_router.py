@@ -281,3 +281,42 @@ def test_chat_uses_fallback_answer_when_llm_times_out(monkeypatch):
     data = resp.json()
     assert data["retrieval_meta"]["llm_fallback_used"] is True
     assert "[1]" in data["answer"]
+
+
+def test_sort_and_select_contexts_keeps_pinned_rows():
+    contexts = [
+        {
+            "paper_id": 1,
+            "chunk_id": 11,
+            "seq": 1,
+            "vector_score": 0.01,
+            "rerank_score": 0.0,
+            "text": "Pinned summary",
+            "pinned": True,
+        },
+        {
+            "paper_id": 1,
+            "chunk_id": 12,
+            "seq": 2,
+            "vector_score": 0.9,
+            "rerank_score": 0.0,
+            "text": "Regular chunk A",
+        },
+        {
+            "paper_id": 1,
+            "chunk_id": 13,
+            "seq": 3,
+            "vector_score": 0.8,
+            "rerank_score": 0.0,
+            "text": "Regular chunk B",
+        },
+    ]
+    selected = chat_router.sort_and_select_contexts(
+        query="limits",
+        contexts=contexts,
+        final_k=2,
+        rerank=False,
+        scope="paper",
+    )
+    chunk_ids = {item.get("chunk_id") for item in selected}
+    assert 11 in chunk_ids

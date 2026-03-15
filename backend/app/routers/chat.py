@@ -206,6 +206,16 @@ def normalize_query_tokens(query: str) -> List[str]:
     return filtered
 
 
+def extract_query_anchor_terms(query: str, limit: int = 4) -> List[str]:
+    anchors: List[str] = []
+    for token in normalize_query_tokens(query):
+        if token not in anchors:
+            anchors.append(token)
+        if len(anchors) >= limit:
+            break
+    return anchors
+
+
 def local_rerank_score(query: str, text: str) -> float:
     q_tokens = normalize_query_tokens(query)
     if not q_tokens:
@@ -356,6 +366,8 @@ def fetch_paper_summary_context(
         "paper_id": paper_id,
         "chunk_id": None,
         "seq": -1,
+        "source_type": "paper_summary",
+        "pinned": True,
         "distance": None,
         "vector_score": min(1.5, 0.2 + local_rerank_score(query, text)),
         "rerank_score": 0.0,
@@ -370,24 +382,52 @@ def sort_and_select_contexts(
     rerank: bool,
     scope: str,
 ) -> List[Dict[str, Any]]:
+    pinned_contexts = [row for row in contexts if row.get("pinned")]
+    normal_contexts = [row for row in contexts if not row.get("pinned")]
+
     if rerank:
-        for row in contexts:
+        for row in normal_contexts:
             row["rerank_score"] = local_rerank_score(query, row.get("text") or "")
-        contexts.sort(
+        normal_contexts.sort(
             key=lambda item: (item.get("rerank_score", 0.0), item.get("vector_score", 0.0)),
             reverse=True,
         )
     else:
-        contexts.sort(key=lambda item: item.get("vector_score", 0.0), reverse=True)
+        normal_contexts.sort(key=lambda item: item.get("vector_score", 0.0), reverse=True)
 
     per_paper_cap = final_k if scope == "paper" else 3
     paper_counts: Dict[str, int] = {}
     selected: List[Dict[str, Any]] = []
-    for row in contexts:
+    seen_keys = set()
+
+    def row_key(row: Dict[str, Any]) -> str:
+        chunk_id = row.get("chunk_id")
+        if chunk_id is not None:
+            return f"chunk:{chunk_id}"
+        return f"paper:{row.get('paper_id')}#seq:{row.get('seq')}"
+
+    for row in pinned_contexts:
+        key = row_key(row)
+        if key in seen_keys:
+            continue
         paper_key = str(row.get("paper_id") or "unknown")
         if paper_counts.get(paper_key, 0) >= per_paper_cap:
             continue
         selected.append(row)
+        seen_keys.add(key)
+        paper_counts[paper_key] = paper_counts.get(paper_key, 0) + 1
+        if len(selected) >= final_k:
+            return selected
+
+    for row in normal_contexts:
+        key = row_key(row)
+        if key in seen_keys:
+            continue
+        paper_key = str(row.get("paper_id") or "unknown")
+        if paper_counts.get(paper_key, 0) >= per_paper_cap:
+            continue
+        selected.append(row)
+        seen_keys.add(key)
         paper_counts[paper_key] = paper_counts.get(paper_key, 0) + 1
         if len(selected) >= final_k:
             break
@@ -649,12 +689,23 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         base_system_prompt
         + " Citation is mandatory: every paragraph must include at least one valid [n] citation."
     )
+    anchor_terms = extract_query_anchor_terms(req.query, limit=4)
+    anchor_hint = ""
+    if anchor_terms:
+        anchor_hint = (
+            " Reuse key query terms verbatim when relevant: "
+            + ", ".join(anchor_terms)
+            + "."
+        )
+
     user_prompt = (
         f"Question: {req.query}\n\n"
         "Context snippets:\n"
         f"{context_text}\n\n"
         "Return a concise answer with explicit inline citations. "
-        "Use no more than 2 short paragraphs and keep the total within 5 sentences."
+        "Use no more than 2 short paragraphs and keep the total within 5 sentences. "
+        "Use the same language as the question."
+        f"{anchor_hint}"
     )
 
     generation_started = time.perf_counter()
