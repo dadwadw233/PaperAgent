@@ -6,6 +6,7 @@ import { PipelinePanel } from "../PipelinePanel";
 import type { Settings } from "../../types";
 import {
   dedupeAttachments,
+  deletePipelineJob,
   fetchPipelineJobs,
   fetchPipelineStats,
   getEmbedStatus,
@@ -22,6 +23,7 @@ import {
 
 vi.mock("../../api", () => ({
   dedupeAttachments: vi.fn(),
+  deletePipelineJob: vi.fn(),
   fetchPipelineStats: vi.fn(),
   fetchPipelineJobs: vi.fn(),
   getProcessPdfsStatus: vi.fn(),
@@ -40,6 +42,7 @@ const mockedFetchPipelineStats = vi.mocked(fetchPipelineStats);
 const mockedFetchPipelineJobs = vi.mocked(fetchPipelineJobs);
 const mockedResumePipelineJob = vi.mocked(resumePipelineJob);
 const mockedGetProcessPdfsStatus = vi.mocked(getProcessPdfsStatus);
+const mockedDeletePipelineJob = vi.mocked(deletePipelineJob);
 
 const settings: Settings = {
   apiBase: "http://127.0.0.1:8000",
@@ -62,6 +65,7 @@ describe("PipelinePanel", () => {
     vi.mocked(getSummarizeStatus).mockResolvedValue({ running: false, returncode: 0, log: "", stats: {} });
     vi.mocked(stopSummarize).mockResolvedValue({ status: "stopped" });
     vi.mocked(stopProcessPdfs).mockResolvedValue({ status: "stopped" });
+    mockedDeletePipelineJob.mockResolvedValue({ status: "deleted", job_id: "old-process-job" });
 
     mockedFetchPipelineStats.mockResolvedValue({
       pdf_count: 10,
@@ -106,7 +110,7 @@ describe("PipelinePanel", () => {
 
     expect(await screen.findByText("Job History")).toBeInTheDocument();
     expect(await screen.findByText("old-process-job", { exact: false })).toBeInTheDocument();
-    expect(mockedFetchPipelineJobs).toHaveBeenCalledWith(settings, { limit: 30 });
+    expect(mockedFetchPipelineJobs).toHaveBeenCalledWith(settings, { limit: 10, job_type: undefined });
   });
 
   it("resumes interrupted process job from history", async () => {
@@ -122,5 +126,19 @@ describe("PipelinePanel", () => {
     await waitFor(() => {
       expect(mockedGetProcessPdfsStatus).toHaveBeenCalledWith(settings, "new-process-job");
     });
+  });
+
+  it("deletes a non-running job from history", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PipelinePanel settings={settings} />);
+
+    const deleteButton = await screen.findByRole("button", { name: "Delete" });
+    await user.click(deleteButton);
+
+    await waitFor(() => {
+      expect(mockedDeletePipelineJob).toHaveBeenCalledWith(settings, "old-process-job");
+    });
+    confirmSpy.mockRestore();
   });
 });

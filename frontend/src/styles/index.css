@@ -1311,6 +1311,28 @@ textarea:focus {
   color: var(--text);
 }
 
+.job-history-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.job-history-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.job-history-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Banners */
 .error-banner,
 .success-banner,

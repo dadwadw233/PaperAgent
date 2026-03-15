@@ -13,6 +13,7 @@ import {
   stopSummarize,
   stopProcessPdfs,
   resumePipelineJob,
+  deletePipelineJob,
 } from "../api";
 import { PipelineJob, Settings } from "../types";
 
@@ -81,6 +82,10 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   const [jobs, setJobs] = useState<PipelineJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobsLimit, setJobsLimit] = useState(10);
+  const [jobTypeFilter, setJobTypeFilter] = useState<"all" | "process_pdfs" | "embed_chunks" | "summarize">("all");
+  const [jobStatusFilter, setJobStatusFilter] = useState<"all" | string>("all");
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   useEffect(() => {
     setEmbedModel(settings.embedModel || settings.llmModel || "");
@@ -123,7 +128,10 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     setJobsLoading(true);
     setJobsError(null);
     try {
-      const items = await fetchPipelineJobs(settings, { limit: 30 });
+      const items = await fetchPipelineJobs(settings, {
+        limit: jobsLimit,
+        job_type: jobTypeFilter === "all" ? undefined : jobTypeFilter,
+      });
       setJobs(items);
     } catch (err) {
       setJobsError(err instanceof Error ? err.message : "Failed to load jobs");
@@ -135,7 +143,12 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   useEffect(() => {
     loadStats();
     loadJobs();
-  }, [settings.apiBase]);
+  }, [settings.apiBase, jobsLimit, jobTypeFilter]);
+
+  const displayedJobs = useMemo(
+    () => jobs.filter((job) => jobStatusFilter === "all" || job.status === jobStatusFilter),
+    [jobs, jobStatusFilter],
+  );
 
   const runPdfProcessing = async () => {
     setPdfError(null);
@@ -588,17 +601,55 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
       <div className="action-card">
         <div className="action-card-header">
           <h3 className="action-card-title">Job History</h3>
-          <button className="ghost-btn" onClick={loadJobs} disabled={jobsLoading}>
-            Refresh
-          </button>
+          <div className="stack-row">
+            <button className="ghost-btn" onClick={loadJobs} disabled={jobsLoading}>
+              Refresh
+            </button>
+            <button
+              className="ghost-btn"
+              onClick={() => setJobsLimit((prev) => prev + 10)}
+              disabled={jobsLoading || jobs.length < jobsLimit}
+            >
+              Load 10 More
+            </button>
+          </div>
         </div>
         <div className="action-card-body">
+          <div className="job-history-controls">
+            <span className="muted">Showing latest {jobsLimit}</span>
+            <select
+              className="select-input"
+              value={jobTypeFilter}
+              onChange={(e) => {
+                setJobTypeFilter(e.target.value as "all" | "process_pdfs" | "embed_chunks" | "summarize");
+                setJobsLimit(10);
+              }}
+            >
+              <option value="all">All types</option>
+              <option value="process_pdfs">process_pdfs</option>
+              <option value="embed_chunks">embed_chunks</option>
+              <option value="summarize">summarize</option>
+            </select>
+            <select
+              className="select-input"
+              value={jobStatusFilter}
+              onChange={(e) => setJobStatusFilter(e.target.value)}
+            >
+              <option value="all">All status</option>
+              <option value="running">running</option>
+              <option value="stopping">stopping</option>
+              <option value="succeeded">succeeded</option>
+              <option value="failed">failed</option>
+              <option value="stopped">stopped</option>
+              <option value="interrupted">interrupted</option>
+            </select>
+          </div>
           {jobsError && <div className="error-banner">{jobsError}</div>}
-          {jobs.length === 0 && !jobsLoading && <div className="muted">No jobs yet.</div>}
+          {displayedJobs.length === 0 && !jobsLoading && <div className="muted">No jobs yet.</div>}
           {jobsLoading && <div className="muted">Loading jobs...</div>}
-          {jobs.length > 0 && (
-            <div style={{ display: "grid", gap: 8 }}>
-              {jobs.map((job) => (
+          {displayedJobs.length > 0 && (
+            <div className="job-history-list">
+              {displayedJobs.map((job) => (
                 <div key={job.job_id} className="card compact" style={{ cursor: "default" }}>
                   <div className="card-title" style={{ fontSize: 13 }}>
                     {job.job_type} · {job.status}
@@ -606,8 +657,8 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                   <div className="muted">job_id: {job.job_id}</div>
                   <div className="muted">updated: {job.updated_at || "n/a"}</div>
                   {job.error_message && <div className="muted">error: {job.error_message}</div>}
-                  {["interrupted", "failed", "stopped"].includes(job.status) && (
-                    <div style={{ marginTop: 6 }}>
+                  <div className="job-history-actions">
+                    {["interrupted", "failed", "stopped"].includes(job.status) && (
                       <button
                         className="ghost-btn"
                         onClick={async () => {
@@ -635,8 +686,27 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
                       >
                         Resume
                       </button>
-                    </div>
-                  )}
+                    )}
+                    <button
+                      className="ghost-btn"
+                      disabled={job.running || deletingJobId === job.job_id}
+                      onClick={async () => {
+                        const confirmed = window.confirm(`Delete job ${job.job_id}? This cannot be undone.`);
+                        if (!confirmed) return;
+                        try {
+                          setDeletingJobId(job.job_id);
+                          await deletePipelineJob(settings, job.job_id);
+                          await loadJobs();
+                        } catch (err) {
+                          setJobsError(err instanceof Error ? err.message : "Failed to delete job");
+                        } finally {
+                          setDeletingJobId(null);
+                        }
+                      }}
+                    >
+                      {deletingJobId === job.job_id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

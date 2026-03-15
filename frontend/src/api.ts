@@ -335,3 +335,16 @@ export async function resumePipelineJob(settings: Settings, jobId: string): Prom
   }
   return res.json();
 }
+
+export async function deletePipelineJob(settings: Settings, jobId: string): Promise<{ status: string; job_id: string }> {
+  const url = buildUrl(settings.apiBase, `/pipeline/jobs/${jobId}`);
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Pipeline delete failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
