@@ -263,7 +263,19 @@ export async function stopSummarize(settings: Settings, job_id: string): Promise
 
 export async function fetchPipelineStats(
   settings: Settings,
-): Promise<{ pdf_count: number; papers_with_pdf: number; papers_with_chunks: number; missing_papers: number; missing_pdfs: number; sample_missing: any[]; summary_rows: number; papers_with_summary: number; missing_summary: number }> {
+): Promise<{
+  pdf_count: number;
+  papers_with_pdf: number;
+  papers_with_chunks: number;
+  missing_papers: number;
+  missing_pdfs: number;
+  sample_missing: any[];
+  summary_rows: number;
+  papers_with_summary: number;
+  missing_summary: number;
+  chunks_total?: number;
+  embed_estimate?: { persist_dir: string; collection: string; embedded_count: number } | null;
+}> {
   const url = buildUrl(settings.apiBase, "/pipeline/stats");
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
