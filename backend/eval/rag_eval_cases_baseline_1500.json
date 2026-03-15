@@ -1,0 +1,1367 @@
+{
+  "meta": {
+    "paper_total_with_chunks": 1419,
+    "paper_cases": 96,
+    "total_cases": 109
+  },
+  "cases": [
+    {
+      "id": "paper-1-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "memgen"
+      ]
+    },
+    {
+      "id": "paper-15-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 15,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "think"
+      ]
+    },
+    {
+      "id": "paper-32-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 32,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "geometrycrafter"
+      ]
+    },
+    {
+      "id": "paper-47-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 47,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "ec3r"
+      ]
+    },
+    {
+      "id": "paper-62-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 62,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "bridge"
+      ]
+    },
+    {
+      "id": "paper-76-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 76,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "quantized"
+      ]
+    },
+    {
+      "id": "paper-92-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 92,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "spatialvid"
+      ]
+    },
+    {
+      "id": "paper-108-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 108,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "verltool"
+      ]
+    },
+    {
+      "id": "paper-123-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 123,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "process"
+      ]
+    },
+    {
+      "id": "paper-138-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 138,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "follow"
+      ]
+    },
+    {
+      "id": "paper-153-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 153,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "toward"
+      ]
+    },
+    {
+      "id": "paper-169-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 169,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "objectgs"
+      ]
+    },
+    {
+      "id": "paper-184-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 184,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "automated"
+      ]
+    },
+    {
+      "id": "paper-199-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 199,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "point3r"
+      ]
+    },
+    {
+      "id": "paper-213-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 213,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "agent3d"
+      ]
+    },
+    {
+      "id": "paper-228-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 228,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mmsi"
+      ]
+    },
+    {
+      "id": "paper-243-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 243,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "planting"
+      ]
+    },
+    {
+      "id": "paper-258-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 258,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mmar"
+      ]
+    },
+    {
+      "id": "paper-274-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 274,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vpgs"
+      ]
+    },
+    {
+      "id": "paper-288-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 288,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "generalized"
+      ]
+    },
+    {
+      "id": "paper-303-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 303,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "bench"
+      ]
+    },
+    {
+      "id": "paper-318-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 318,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "grounding"
+      ]
+    },
+    {
+      "id": "paper-333-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 333,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "unitok"
+      ]
+    },
+    {
+      "id": "paper-347-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 347,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "bench"
+      ]
+    },
+    {
+      "id": "paper-362-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 362,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "structure"
+      ]
+    },
+    {
+      "id": "paper-377-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 377,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "proagent"
+      ]
+    },
+    {
+      "id": "paper-392-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 392,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "exo2ego"
+      ]
+    },
+    {
+      "id": "paper-407-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 407,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "randar"
+      ]
+    },
+    {
+      "id": "paper-421-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 421,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "complexity"
+      ]
+    },
+    {
+      "id": "paper-438-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 438,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "motion"
+      ]
+    },
+    {
+      "id": "paper-454-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 454,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "seed"
+      ]
+    },
+    {
+      "id": "paper-470-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 470,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "neural"
+      ]
+    },
+    {
+      "id": "paper-485-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 485,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "msgfield"
+      ]
+    },
+    {
+      "id": "paper-499-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 499,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "improving"
+      ]
+    },
+    {
+      "id": "paper-516-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 516,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "omnialign"
+      ]
+    },
+    {
+      "id": "paper-531-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 531,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mfos"
+      ]
+    },
+    {
+      "id": "paper-547-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 547,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "unified"
+      ]
+    },
+    {
+      "id": "paper-561-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 561,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "empirical"
+      ]
+    },
+    {
+      "id": "paper-576-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 576,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "predictive"
+      ]
+    },
+    {
+      "id": "paper-591-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 591,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "learning"
+      ]
+    },
+    {
+      "id": "paper-607-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 607,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "learning"
+      ]
+    },
+    {
+      "id": "paper-622-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 622,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "diffusion"
+      ]
+    },
+    {
+      "id": "paper-636-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 636,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "physical"
+      ]
+    },
+    {
+      "id": "paper-651-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 651,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "onepose"
+      ]
+    },
+    {
+      "id": "paper-666-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 666,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "deep"
+      ]
+    },
+    {
+      "id": "paper-681-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 681,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "semi"
+      ]
+    },
+    {
+      "id": "paper-695-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 695,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "epos"
+      ]
+    },
+    {
+      "id": "paper-711-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 711,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "step"
+      ]
+    },
+    {
+      "id": "paper-727-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 727,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "aspanformer"
+      ]
+    },
+    {
+      "id": "paper-742-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 742,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "reduce"
+      ]
+    },
+    {
+      "id": "paper-757-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 757,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vision"
+      ]
+    },
+    {
+      "id": "paper-771-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 771,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "guided"
+      ]
+    },
+    {
+      "id": "paper-786-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 786,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "fast"
+      ]
+    },
+    {
+      "id": "paper-802-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 802,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "sketchgen"
+      ]
+    },
+    {
+      "id": "paper-817-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 817,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "diffusion"
+      ]
+    },
+    {
+      "id": "paper-832-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 832,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "scenedm"
+      ]
+    },
+    {
+      "id": "paper-847-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 847,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "instant3d"
+      ]
+    },
+    {
+      "id": "paper-863-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 863,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "tkwinformer"
+      ]
+    },
+    {
+      "id": "paper-879-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 879,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "drivingdiffusion"
+      ]
+    },
+    {
+      "id": "paper-894-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 894,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "computer"
+      ]
+    },
+    {
+      "id": "paper-908-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 908,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "pointllm"
+      ]
+    },
+    {
+      "id": "paper-923-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 923,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "object"
+      ]
+    },
+    {
+      "id": "paper-938-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 938,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "generative"
+      ]
+    },
+    {
+      "id": "paper-953-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 953,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "cat3d"
+      ]
+    },
+    {
+      "id": "paper-968-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 968,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vision"
+      ]
+    },
+    {
+      "id": "paper-982-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 982,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "robopoint"
+      ]
+    },
+    {
+      "id": "paper-997-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 997,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "diffusion"
+      ]
+    },
+    {
+      "id": "paper-1013-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1013,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "edit"
+      ]
+    },
+    {
+      "id": "paper-1028-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1028,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "dpod"
+      ]
+    },
+    {
+      "id": "paper-1042-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1042,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "posecnn"
+      ]
+    },
+    {
+      "id": "paper-1057-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1057,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "onepose"
+      ]
+    },
+    {
+      "id": "paper-1072-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1072,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "reconstruction"
+      ]
+    },
+    {
+      "id": "paper-1087-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1087,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "object"
+      ]
+    },
+    {
+      "id": "paper-1102-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1102,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "scaling"
+      ]
+    },
+    {
+      "id": "paper-1116-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1116,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "reinforcement"
+      ]
+    },
+    {
+      "id": "paper-1132-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1132,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "lavida"
+      ]
+    },
+    {
+      "id": "paper-1147-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1147,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mmada"
+      ]
+    },
+    {
+      "id": "paper-1162-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1162,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mindomni"
+      ]
+    },
+    {
+      "id": "paper-1176-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1176,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vision"
+      ]
+    },
+    {
+      "id": "paper-1191-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1191,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "focus"
+      ]
+    },
+    {
+      "id": "paper-1206-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1206,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "spare"
+      ]
+    },
+    {
+      "id": "paper-1221-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1221,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "spatialscore"
+      ]
+    },
+    {
+      "id": "paper-1236-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1236,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "mem4nav"
+      ]
+    },
+    {
+      "id": "paper-1250-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1250,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vipergpt"
+      ]
+    },
+    {
+      "id": "paper-1265-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1265,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "pisces"
+      ]
+    },
+    {
+      "id": "paper-1281-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1281,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "uniforward"
+      ]
+    },
+    {
+      "id": "paper-1296-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1296,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "cuvslam"
+      ]
+    },
+    {
+      "id": "paper-1310-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1310,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "stable"
+      ]
+    },
+    {
+      "id": "paper-1325-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1325,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "tool"
+      ]
+    },
+    {
+      "id": "paper-1348-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1348,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "unigen"
+      ]
+    },
+    {
+      "id": "paper-1363-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1363,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "agent0"
+      ]
+    },
+    {
+      "id": "paper-1379-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1379,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "latent"
+      ]
+    },
+    {
+      "id": "paper-1394-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1394,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "vistav2"
+      ]
+    },
+    {
+      "id": "paper-1409-core",
+      "query": "What is the core method and main contribution of this paper?",
+      "scope": "paper",
+      "paper_id": 1409,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "streameqa"
+      ]
+    },
+    {
+      "id": "paper-1426-evidence",
+      "query": "What problem does this paper solve and what evidence supports the claim?",
+      "scope": "paper",
+      "paper_id": 1426,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "native"
+      ]
+    },
+    {
+      "id": "paper-1441-limits",
+      "query": "What limitations or trade-offs are discussed in this paper?",
+      "scope": "paper",
+      "paper_id": 1441,
+      "candidate_k": 20,
+      "final_k": 6,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "cityseeker"
+      ]
+    },
+    {
+      "id": "library-cross-1",
+      "query": "Compare two representative approaches and their tradeoffs.",
+      "scope": "library",
+      "expected_terms": [
+        "tradeoff",
+        "performance"
+      ]
+    },
+    {
+      "id": "library-cross-2",
+      "query": "What recurring limitations appear across these papers?",
+      "scope": "library",
+      "expected_terms": [
+        "limitation"
+      ]
+    },
+    {
+      "id": "library-cross-3",
+      "query": "Summarize the common evaluation settings and benchmark patterns.",
+      "scope": "library",
+      "expected_terms": [
+        "benchmark"
+      ]
+    },
+    {
+      "id": "library-cross-4",
+      "query": "Which methods emphasize efficiency over peak accuracy?",
+      "scope": "library",
+      "expected_terms": [
+        "efficiency",
+        "accuracy"
+      ]
+    },
+    {
+      "id": "library-cross-5",
+      "query": "Give a concise taxonomy of solution paradigms in this library.",
+      "scope": "library",
+      "expected_terms": [
+        "taxonomy"
+      ]
+    },
+    {
+      "id": "library-cross-6",
+      "query": "请总结这个方向的关键挑战，并给出证据。",
+      "scope": "library",
+      "expected_terms": [
+        "挑战",
+        "证据"
+      ]
+    },
+    {
+      "id": "library-cross-7",
+      "query": "请比较两类主流方法的优缺点，并给出引用。",
+      "scope": "library",
+      "expected_terms": [
+        "优缺点"
+      ]
+    },
+    {
+      "id": "library-cross-8",
+      "query": "请说明当前方法在真实部署时最常见的瓶颈。",
+      "scope": "library",
+      "expected_terms": [
+        "瓶颈"
+      ]
+    },
+    {
+      "id": "library-no-answer-1",
+      "query": "What exact production revenue number is reported across the papers?",
+      "scope": "library",
+      "expected_terms": []
+    },
+    {
+      "id": "library-no-answer-2",
+      "query": "Which paper discloses customer names from a commercial contract?",
+      "scope": "library",
+      "expected_terms": []
+    },
+    {
+      "id": "library-no-answer-3",
+      "query": "Give the exact stock ticker and quarterly EPS for every method.",
+      "scope": "library",
+      "expected_terms": []
+    },
+    {
+      "id": "library-long-1",
+      "query": "Provide a long-form synthesis of methods, limitations, and future directions with structured evidence.",
+      "scope": "library",
+      "candidate_k": 30,
+      "final_k": 8,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "future"
+      ]
+    },
+    {
+      "id": "library-long-2",
+      "query": "Create a multi-paragraph comparison across datasets, metrics, and compute cost trends.",
+      "scope": "library",
+      "candidate_k": 30,
+      "final_k": 8,
+      "rerank": true,
+      "require_citations": true,
+      "expected_terms": [
+        "dataset",
+        "metrics"
+      ]
+    }
+  ]
+}

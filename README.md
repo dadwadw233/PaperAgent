@@ -151,6 +151,26 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 
 - 评测脚本：`backend/scripts/evaluate_rag.py`
 - 默认评测集：`backend/eval/rag_eval_cases.json`
+- 规模化评测集生成：`backend/scripts/generate_eval_cases.py`
+- 基线报告目录：`backend/eval/reports/`
+
+```bash
+# 1) 基于本地论文库生成评测集（按论文抽样）
+./.venv/bin/python backend/scripts/generate_eval_cases.py \
+  --paper-cases 96 \
+  --output backend/eval/rag_eval_cases_baseline_1500.json
+
+# 2) 运行评测并产出基线报告
+TS=$(date +%Y%m%d-%H%M%S)
+./.venv/bin/python backend/scripts/evaluate_rag.py \
+  --api-base http://127.0.0.1:8000 \
+  --cases backend/eval/rag_eval_cases_baseline_1500.json \
+  --workers 3 \
+  --output backend/eval/reports/rag-baseline-${TS}.json \
+  --report backend/eval/reports/rag-baseline-${TS}.md \
+  --no-fail
+```
+
 - 本地发布门禁（编译 + 测试 + 评测）：
 
 ```bash
