@@ -1,0 +1,34 @@
+[
+  {
+    "id": "single-paper-core-method",
+    "query": "What is the core method and main contribution?",
+    "scope": "paper",
+    "paper_id": 1,
+    "expected_terms": ["method", "contribution"]
+  },
+  {
+    "id": "single-paper-limitations",
+    "query": "What limitations are explicitly mentioned?",
+    "scope": "paper",
+    "paper_id": 1,
+    "expected_terms": ["limitation", "future work"]
+  },
+  {
+    "id": "cross-paper-comparison",
+    "query": "Compare two representative approaches and their tradeoffs.",
+    "scope": "library",
+    "expected_terms": ["tradeoff", "performance", "cost"]
+  },
+  {
+    "id": "chinese-query",
+    "query": "请总结这个方向的关键挑战，并给出证据。",
+    "scope": "library",
+    "expected_terms": ["挑战", "证据"]
+  },
+  {
+    "id": "no-answer-case",
+    "query": "What exact production revenue number is reported?",
+    "scope": "library",
+    "expected_terms": []
+  }
+]

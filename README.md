@@ -132,6 +132,31 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 - 当前向量嵌入与向量库构建已可用，但端到端 RAG（检索增强生成）的完整体验仍未完全完成。  
 - 后续会逐步把检索、引用、对话上下文等能力打通并提供可选开关。
 
+### RAG 新能力（本地）
+
+- `POST /chat` 支持 `scope=library|paper`（默认 `library`），并支持 `paper_id` 过滤。
+- 支持 `candidate_k`、`final_k`、`rerank`、`require_citations` 参数。
+- 响应新增 `citations`（可追溯 chunk 引用）与 `retrieval_meta`（检索与时延元数据）。
+- 旧参数 `use_embeddings/send_full_text/max_chunks/top_k` 仍兼容一个版本周期。
+
+### Pipeline 任务持久化与恢复
+
+- 新增任务接口：
+  - `GET /pipeline/jobs`
+  - `GET /pipeline/jobs/{job_id}`
+  - `POST /pipeline/jobs/{job_id}/resume`
+- 任务状态持久化到数据库，服务重启后会将运行中任务标记为 `interrupted`，可从历史任务恢复。
+
+### 质量评测与门禁
+
+- 评测脚本：`backend/scripts/evaluate_rag.py`
+- 默认评测集：`backend/eval/rag_eval_cases.json`
+- 本地发布门禁（编译 + 测试 + 评测）：
+
+```bash
+./.venv/bin/python backend/scripts/release_gate.py --api-base http://127.0.0.1:8000
+```
+
 ### 常见问题
 
 - **后端启动报 `sqlmodel/uvicorn` 未找到**：请确保使用 `.venv` 中的 Python；推荐直接运行 `./start_app.sh`。

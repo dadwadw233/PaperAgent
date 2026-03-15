@@ -8,3 +8,4 @@ python-dotenv
 pypdf
 chromadb
 python-multipart
+pytest
