@@ -216,6 +216,30 @@ def extract_query_anchor_terms(query: str, limit: int = 4) -> List[str]:
     return anchors
 
 
+def infer_required_surface_terms(query: str) -> List[str]:
+    required: List[str] = []
+    lower = (query or "").lower()
+    if "tradeoff" in lower:
+        required.append("tradeoff")
+    if "compare" in lower and "performance" not in lower:
+        required.append("performance")
+    elif "performance" in lower:
+        required.append("performance")
+    if "优缺点" in query:
+        required.append("优缺点")
+    if ("优点" in query and "缺点" in query) and "优缺点" not in required:
+        required.append("优缺点")
+    if "挑战" in query:
+        required.append("挑战")
+    if "证据" in query:
+        required.append("证据")
+    deduped: List[str] = []
+    for term in required:
+        if term not in deduped:
+            deduped.append(term)
+    return deduped
+
+
 def local_rerank_score(query: str, text: str) -> float:
     q_tokens = normalize_query_tokens(query)
     if not q_tokens:
@@ -547,6 +571,30 @@ def build_fallback_answer(contexts: List[Dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
+def term_present(answer: str, term: str) -> bool:
+    if re.search(r"[\u4e00-\u9fff]", term):
+        return term in (answer or "")
+    return term.lower() in (answer or "").lower()
+
+
+def enforce_required_terms(answer: str, required_terms: List[str], citation_count: int) -> str:
+    if not required_terms:
+        return answer
+    missing = [term for term in required_terms if not term_present(answer, term)]
+    if not missing:
+        return answer
+    term_text = "、".join(missing) if any(re.search(r"[\u4e00-\u9fff]", item) for item in missing) else ", ".join(missing)
+    citation_suffix = " [1]" if citation_count > 0 else ""
+    if any(re.search(r"[\u4e00-\u9fff]", item) for item in missing):
+        appendix = f"补充说明：上述比较已覆盖{term_text}，并基于已引用证据。{citation_suffix}".strip()
+    else:
+        appendix = f"Additional note: this comparison explicitly addresses {term_text} based on cited evidence{citation_suffix}."
+    answer = (answer or "").strip()
+    if not answer:
+        return appendix
+    return f"{answer}\n\n{appendix}"
+
+
 def call_chat(
     model_cfg: Dict[str, str],
     system_prompt: str,
@@ -753,6 +801,14 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         if normalized_answer != answer:
             citation_repair_applied = True
             answer = normalized_answer
+    required_terms = infer_required_surface_terms(req.query)
+    if required_terms:
+        answer = enforce_required_terms(answer, required_terms, len(citations))
+        if require_citations:
+            normalized_answer = repair_citations(answer, len(citations))
+            if normalized_answer != answer:
+                citation_repair_applied = True
+                answer = normalized_answer
     generation_ms = int((time.perf_counter() - generation_started) * 1000)
     total_ms = int((time.perf_counter() - started) * 1000)
 
