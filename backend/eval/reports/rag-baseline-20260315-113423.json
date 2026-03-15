@@ -1,0 +1,903 @@
+{
+  "total_cases": 109,
+  "retrieval_hit_rate": 0.981651376146789,
+  "citation_valid_rate": 1.0,
+  "answer_grounded_rate": 1.0,
+  "p95_latency_ms": 6715.0,
+  "avg_latency_ms": 3914.559633027523,
+  "workers": 3,
+  "timeout_seconds": 180,
+  "failed_count": 2,
+  "failed_cases": [
+    {
+      "id": "library-cross-1",
+      "ok": false,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": false,
+      "latency_ms": 3135
+    },
+    {
+      "id": "library-cross-7",
+      "ok": false,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": false,
+      "latency_ms": 3993
+    }
+  ],
+  "cases": [
+    {
+      "id": "paper-1-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6578
+    },
+    {
+      "id": "paper-15-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6580
+    },
+    {
+      "id": "paper-32-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6781
+    },
+    {
+      "id": "paper-47-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3161
+    },
+    {
+      "id": "paper-62-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4243
+    },
+    {
+      "id": "paper-76-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2986
+    },
+    {
+      "id": "paper-92-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3455
+    },
+    {
+      "id": "paper-108-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3729
+    },
+    {
+      "id": "paper-123-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3726
+    },
+    {
+      "id": "paper-138-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3781
+    },
+    {
+      "id": "paper-153-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3290
+    },
+    {
+      "id": "paper-169-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3688
+    },
+    {
+      "id": "paper-184-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3943
+    },
+    {
+      "id": "paper-199-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2797
+    },
+    {
+      "id": "paper-213-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3268
+    },
+    {
+      "id": "paper-228-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3173
+    },
+    {
+      "id": "paper-243-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3731
+    },
+    {
+      "id": "paper-258-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3182
+    },
+    {
+      "id": "paper-274-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3357
+    },
+    {
+      "id": "paper-288-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3629
+    },
+    {
+      "id": "paper-303-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3394
+    },
+    {
+      "id": "paper-318-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3782
+    },
+    {
+      "id": "paper-333-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3241
+    },
+    {
+      "id": "paper-347-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3267
+    },
+    {
+      "id": "paper-362-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3509
+    },
+    {
+      "id": "paper-377-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2827
+    },
+    {
+      "id": "paper-392-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3497
+    },
+    {
+      "id": "paper-407-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6981
+    },
+    {
+      "id": "paper-421-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3497
+    },
+    {
+      "id": "paper-438-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6824
+    },
+    {
+      "id": "paper-454-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4268
+    },
+    {
+      "id": "paper-470-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4383
+    },
+    {
+      "id": "paper-485-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3615
+    },
+    {
+      "id": "paper-499-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3501
+    },
+    {
+      "id": "paper-516-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 7716
+    },
+    {
+      "id": "paper-531-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6602
+    },
+    {
+      "id": "paper-547-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 7220
+    },
+    {
+      "id": "paper-561-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4165
+    },
+    {
+      "id": "paper-576-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2465
+    },
+    {
+      "id": "paper-591-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3338
+    },
+    {
+      "id": "paper-607-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4213
+    },
+    {
+      "id": "paper-622-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3563
+    },
+    {
+      "id": "paper-636-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 5235
+    },
+    {
+      "id": "paper-651-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3606
+    },
+    {
+      "id": "paper-666-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3668
+    },
+    {
+      "id": "paper-681-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3305
+    },
+    {
+      "id": "paper-695-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3978
+    },
+    {
+      "id": "paper-711-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2317
+    },
+    {
+      "id": "paper-727-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4039
+    },
+    {
+      "id": "paper-742-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3202
+    },
+    {
+      "id": "paper-757-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3863
+    },
+    {
+      "id": "paper-771-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2950
+    },
+    {
+      "id": "paper-786-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3533
+    },
+    {
+      "id": "paper-802-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3907
+    },
+    {
+      "id": "paper-817-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3873
+    },
+    {
+      "id": "paper-832-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3421
+    },
+    {
+      "id": "paper-847-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3363
+    },
+    {
+      "id": "paper-863-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3287
+    },
+    {
+      "id": "paper-879-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3037
+    },
+    {
+      "id": "paper-894-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4577
+    },
+    {
+      "id": "paper-908-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4623
+    },
+    {
+      "id": "paper-923-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3901
+    },
+    {
+      "id": "paper-938-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4361
+    },
+    {
+      "id": "paper-953-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4033
+    },
+    {
+      "id": "paper-968-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3596
+    },
+    {
+      "id": "paper-982-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2838
+    },
+    {
+      "id": "paper-997-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2652
+    },
+    {
+      "id": "paper-1013-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 7348
+    },
+    {
+      "id": "paper-1028-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3597
+    },
+    {
+      "id": "paper-1042-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4128
+    },
+    {
+      "id": "paper-1057-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2817
+    },
+    {
+      "id": "paper-1072-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2401
+    },
+    {
+      "id": "paper-1087-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3192
+    },
+    {
+      "id": "paper-1102-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3826
+    },
+    {
+      "id": "paper-1116-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3619
+    },
+    {
+      "id": "paper-1132-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3857
+    },
+    {
+      "id": "paper-1147-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2870
+    },
+    {
+      "id": "paper-1162-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2605
+    },
+    {
+      "id": "paper-1176-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4107
+    },
+    {
+      "id": "paper-1191-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3417
+    },
+    {
+      "id": "paper-1206-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3594
+    },
+    {
+      "id": "paper-1221-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3568
+    },
+    {
+      "id": "paper-1236-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3256
+    },
+    {
+      "id": "paper-1250-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3611
+    },
+    {
+      "id": "paper-1265-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3463
+    },
+    {
+      "id": "paper-1281-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3435
+    },
+    {
+      "id": "paper-1296-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4172
+    },
+    {
+      "id": "paper-1310-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3750
+    },
+    {
+      "id": "paper-1325-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3746
+    },
+    {
+      "id": "paper-1348-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2804
+    },
+    {
+      "id": "paper-1363-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3685
+    },
+    {
+      "id": "paper-1379-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3652
+    },
+    {
+      "id": "paper-1394-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6616
+    },
+    {
+      "id": "paper-1409-core",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2904
+    },
+    {
+      "id": "paper-1426-evidence",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3129
+    },
+    {
+      "id": "paper-1441-limits",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3463
+    },
+    {
+      "id": "library-cross-1",
+      "ok": false,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": false,
+      "latency_ms": 3135
+    },
+    {
+      "id": "library-cross-2",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3367
+    },
+    {
+      "id": "library-cross-3",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3446
+    },
+    {
+      "id": "library-cross-4",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2931
+    },
+    {
+      "id": "library-cross-5",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 3142
+    },
+    {
+      "id": "library-cross-6",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4417
+    },
+    {
+      "id": "library-cross-7",
+      "ok": false,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": false,
+      "latency_ms": 3993
+    },
+    {
+      "id": "library-cross-8",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 4171
+    },
+    {
+      "id": "library-no-answer-1",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 5562
+    },
+    {
+      "id": "library-no-answer-2",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 5561
+    },
+    {
+      "id": "library-no-answer-3",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 5065
+    },
+    {
+      "id": "library-long-1",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 6220
+    },
+    {
+      "id": "library-long-2",
+      "ok": true,
+      "citation_valid": true,
+      "grounded_valid": true,
+      "retrieval_valid": true,
+      "latency_ms": 2934
+    }
+  ]
+}
