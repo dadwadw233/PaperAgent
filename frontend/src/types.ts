@@ -1,4 +1,5 @@
 export type TagType = "domain" | "task" | "keyword" | string;
+export type ThemeMode = "dark" | "light";
 
 export interface PaperListItem {
   id: number;

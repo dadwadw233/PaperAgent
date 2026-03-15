@@ -71,10 +71,10 @@
 
 @keyframes glow {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(83, 155, 245, 0.3);
+    box-shadow: 0 0 4px rgba(47, 158, 143, 0.2);
   }
   50% {
-    box-shadow: 0 0 20px rgba(83, 155, 245, 0.6);
+    box-shadow: 0 0 12px rgba(47, 158, 143, 0.35);
   }
 }
 
@@ -120,4 +120,3 @@
 .stagger-item:nth-child(4) { animation-delay: 0.2s; }
 .stagger-item:nth-child(5) { animation-delay: 0.25s; }
 .stagger-item:nth-child(n+6) { animation-delay: 0.3s; }
-

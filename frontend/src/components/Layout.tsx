@@ -1,7 +1,13 @@
 import React from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { ThemeMode } from "../types";
 
-export const Layout: React.FC = () => {
+interface Props {
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+}
+
+export const Layout: React.FC<Props> = ({ theme, onThemeChange }) => {
   return (
     <div className="app-layout">
       <aside className="sidebar">
@@ -31,11 +37,28 @@ export const Layout: React.FC = () => {
           <div className="version">v0.1.0</div>
         </div>
       </aside>
-      
+
       <main className="main-content">
+        <header className="global-toolbar" role="toolbar" aria-label="Global controls">
+          <div className="theme-toggle" role="group" aria-label="Theme switcher">
+            <button
+              className={`theme-toggle-btn ${theme === "light" ? "active" : ""}`}
+              onClick={() => onThemeChange("light")}
+              aria-pressed={theme === "light"}
+            >
+              Light
+            </button>
+            <button
+              className={`theme-toggle-btn ${theme === "dark" ? "active" : ""}`}
+              onClick={() => onThemeChange("dark")}
+              aria-pressed={theme === "dark"}
+            >
+              Dark
+            </button>
+          </div>
+        </header>
         <Outlet />
       </main>
     </div>
   );
 };
-

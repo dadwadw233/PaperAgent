@@ -5,20 +5,27 @@ import { PapersPage } from "./pages/PapersPage";
 import { ChatPage } from "./pages/ChatPage";
 import { ManagementPage } from "./pages/ManagementPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { loadSettings, saveSettings } from "./storage";
-import { Settings } from "./types";
+import { loadSettings, saveSettings, loadUiPreferences, saveUiPreferences } from "./storage";
+import { Settings, ThemeMode } from "./types";
 
 const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [theme, setTheme] = useState<ThemeMode>(() => loadUiPreferences().theme);
 
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    saveUiPreferences({ theme });
+  }, [theme]);
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route path="/" element={<Layout theme={theme} onThemeChange={setTheme} />}>
           <Route index element={<PapersPage settings={settings} />} />
           <Route path="chat" element={<ChatPage settings={settings} />} />
           <Route path="management" element={<ManagementPage settings={settings} />} />

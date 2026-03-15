@@ -1,6 +1,7 @@
-import { Settings } from "./types";
+import { Settings, ThemeMode } from "./types";
 
 const SETTINGS_KEY = "paper-agent-settings";
+const UI_PREFERENCES_KEY = "paper-agent-ui-preferences";
 const ENV_API_BASE = import.meta.env.VITE_API_BASE as string | undefined;
 
 function resolveDefaultApiBase(): string {
@@ -24,6 +25,14 @@ export const defaultSettings: Settings = {
   embedBaseUrl: "",
   embedModel: "",
   embedApiKey: "",
+};
+
+export interface UiPreferences {
+  theme: ThemeMode;
+}
+
+export const defaultUiPreferences: UiPreferences = {
+  theme: "dark",
 };
 
 export function loadSettings(): Settings {
@@ -50,5 +59,32 @@ export function saveSettings(settings: Settings) {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (err) {
     console.warn("Failed to save settings", err);
+  }
+}
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "dark" || value === "light";
+}
+
+export function loadUiPreferences(): UiPreferences {
+  try {
+    const raw = localStorage.getItem(UI_PREFERENCES_KEY);
+    if (!raw) {
+      return defaultUiPreferences;
+    }
+    const parsed = JSON.parse(raw) as Partial<UiPreferences>;
+    const theme = isThemeMode(parsed.theme) ? parsed.theme : defaultUiPreferences.theme;
+    return { theme };
+  } catch (err) {
+    console.warn("Failed to load UI preferences from localStorage", err);
+    return defaultUiPreferences;
+  }
+}
+
+export function saveUiPreferences(prefs: UiPreferences) {
+  try {
+    localStorage.setItem(UI_PREFERENCES_KEY, JSON.stringify(prefs));
+  } catch (err) {
+    console.warn("Failed to save UI preferences", err);
   }
 }
