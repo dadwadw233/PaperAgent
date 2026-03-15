@@ -129,15 +129,15 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 - 欢迎提交 Issue/PR，一起完善体验与稳定性。
 
 **RAG 说明**
-- 当前向量嵌入与向量库构建已可用，但端到端 RAG（检索增强生成）的完整体验仍未完全完成。  
-- 后续会逐步把检索、引用、对话上下文等能力打通并提供可选开关。
+- 当前默认聊天主路径已切换为 RAG：向量召回 -> 可切换重排 -> 带引用生成（失败时回退词法检索与快速兜底答案）。
+- 已支持全库问答与单论文过滤问答、引用校验与自动修复、重启后任务恢复与评测门禁。
 
 ### RAG 新能力（本地）
 
 - `POST /chat` 支持 `scope=library|paper`（默认 `library`），并支持 `paper_id` 过滤。
 - 支持 `candidate_k`、`final_k`、`rerank`、`require_citations` 参数。
 - 响应新增 `citations`（可追溯 chunk 引用）与 `retrieval_meta`（检索与时延元数据）。
-- 旧参数 `use_embeddings/send_full_text/max_chunks/top_k` 仍兼容一个版本周期。
+- 旧参数 `use_embeddings/send_full_text/max_chunks/top_k` 仍兼容一个版本周期；当使用旧参数时，`retrieval_meta` 会返回弃用提示（计划在 **2026-06-30** 后移除）。
 
 ### Pipeline 任务持久化与恢复
 
@@ -153,6 +153,7 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 - 默认评测集：`backend/eval/rag_eval_cases.json`
 - 规模化评测集生成：`backend/scripts/generate_eval_cases.py`
 - 基线报告目录：`backend/eval/reports/`
+- 端到端冒烟脚本：`backend/scripts/smoke_rag_pipeline.py`
 
 ```bash
 # 1) 基于本地论文库生成评测集（按论文抽样）
@@ -169,9 +170,17 @@ TS=$(date +%Y%m%d-%H%M%S)
   --output backend/eval/reports/rag-baseline-${TS}.json \
   --report backend/eval/reports/rag-baseline-${TS}.md \
   --no-fail
+
+# 3) 端到端冒烟（含中断恢复 + chat 引用检查）
+./.venv/bin/python backend/scripts/smoke_rag_pipeline.py \
+  --api-base http://127.0.0.1:8000 \
+  --process-limit 50 \
+  --embed-limit 500 \
+  --summarize-limit 100 \
+  --interrupt-stage embed_chunks
 ```
 
-- 本地发布门禁（编译 + 测试 + 评测）：
+- 本地发布门禁（后端编译/测试 + 前端测试/构建 + 评测）：
 
 ```bash
 ./.venv/bin/python backend/scripts/release_gate.py --api-base http://127.0.0.1:8000
@@ -181,12 +190,16 @@ TS=$(date +%Y%m%d-%H%M%S)
 - 优先使用 `backend/eval/rag_eval_cases_baseline_1500.json`（不存在时回退到 `backend/eval/rag_eval_cases.json`）。
 - 每次评测自动写入 `backend/eval/reports/rag-baseline-<timestamp>.{json,md}`。
 - 自动与上一份基线 JSON 报告对比，若出现指标回退则阻断发布。
+- 默认执行前端 `test:run` 与 `build` 检查。
 
 可选参数示例：
 
 ```bash
 # 跳过“与上一份报告对比”
 ./.venv/bin/python backend/scripts/release_gate.py --skip-regression-check
+
+# 跳过前端检查（仅用于本地临时排障）
+./.venv/bin/python backend/scripts/release_gate.py --skip-frontend
 
 # 指定评测集与并发参数
 ./.venv/bin/python backend/scripts/release_gate.py \
@@ -330,8 +343,10 @@ This project is in a fast‑moving beta stage:
 - Issues and PRs are very welcome.
 
 **RAG Notice**
-- Embedding + vector store building works today, but full end‑to‑end RAG is not fully integrated yet.
-- We will progressively connect retrieval, citations, and chat context, and expose optional toggles.
+- The default chat path now runs full local RAG:
+  vector retrieval -> optional rerank -> citation-grounded generation.
+- It includes lexical fallback, citation validation/repair, and persistent pipeline job resume after restart.
+- Legacy chat fields (`use_embeddings/send_full_text/max_chunks/top_k`) remain temporarily for compatibility and are planned for removal after **2026-06-30**.
 
 ### Contributing
 
