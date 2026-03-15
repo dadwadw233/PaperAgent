@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   dedupeAttachments,
   fetchPipelineStats,
+  fetchPipelineJobs,
   getProcessPdfsStatus,
   runProcessPdfs,
   startEmbedJob,
@@ -11,8 +12,9 @@ import {
   getSummarizeStatus,
   stopSummarize,
   stopProcessPdfs,
+  resumePipelineJob,
 } from "../api";
-import { Settings } from "../types";
+import { PipelineJob, Settings } from "../types";
 
 interface Props {
   settings: Settings;
@@ -76,6 +78,9 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
   // Stats State
   const [stats, setStats] = useState<PipelineStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [jobs, setJobs] = useState<PipelineJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState<string | null>(null);
 
   useEffect(() => {
     setEmbedModel(settings.embedModel || settings.llmModel || "");
@@ -114,8 +119,22 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
     }
   };
 
+  const loadJobs = async () => {
+    setJobsLoading(true);
+    setJobsError(null);
+    try {
+      const items = await fetchPipelineJobs(settings, { limit: 30 });
+      setJobs(items);
+    } catch (err) {
+      setJobsError(err instanceof Error ? err.message : "Failed to load jobs");
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadStats();
+    loadJobs();
   }, [settings.apiBase]);
 
   const runPdfProcessing = async () => {
@@ -158,6 +177,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
             setPdfError(`Processing failed (exit code: ${status.returncode})`);
           }
           loadStats();
+          loadJobs();
         }
       } catch (err) {
         setPdfError(err instanceof Error ? err.message : "Failed to fetch status");
@@ -204,6 +224,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
             setEmbedError(`Embedding failed (exit code: ${status.returncode})`);
           }
           loadStats();
+          loadJobs();
         }
         if (status.running) {
           setTimeout(tick, 2000);
@@ -264,6 +285,7 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
             onSummaryFinished?.();
           }
           loadStats();
+          loadJobs();
         }
         if (status.running) {
           setTimeout(tick, 2000);
@@ -562,6 +584,65 @@ export const PipelinePanel: React.FC<Props> = ({ settings, onSummaryFinished }) 
           </div>
         </div>
       )}
+
+      <div className="action-card">
+        <div className="action-card-header">
+          <h3 className="action-card-title">Job History</h3>
+          <button className="ghost-btn" onClick={loadJobs} disabled={jobsLoading}>
+            Refresh
+          </button>
+        </div>
+        <div className="action-card-body">
+          {jobsError && <div className="error-banner">{jobsError}</div>}
+          {jobs.length === 0 && !jobsLoading && <div className="muted">No jobs yet.</div>}
+          {jobsLoading && <div className="muted">Loading jobs...</div>}
+          {jobs.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              {jobs.map((job) => (
+                <div key={job.job_id} className="card compact" style={{ cursor: "default" }}>
+                  <div className="card-title" style={{ fontSize: 13 }}>
+                    {job.job_type} · {job.status}
+                  </div>
+                  <div className="muted">job_id: {job.job_id}</div>
+                  <div className="muted">updated: {job.updated_at || "n/a"}</div>
+                  {job.error_message && <div className="muted">error: {job.error_message}</div>}
+                  {["interrupted", "failed", "stopped"].includes(job.status) && (
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        className="ghost-btn"
+                        onClick={async () => {
+                          try {
+                            const resumed = await resumePipelineJob(settings, job.job_id);
+                            await loadJobs();
+                            await loadStats();
+                            if (job.job_type === "process_pdfs") {
+                              setPdfJobId(resumed.job_id);
+                              setPdfRunning(true);
+                              pollPdfStatus(resumed.job_id);
+                            } else if (job.job_type === "embed_chunks") {
+                              setEmbedJobId(resumed.job_id);
+                              setEmbedRunning(true);
+                              pollEmbedStatus(resumed.job_id);
+                            } else if (job.job_type === "summarize") {
+                              setSummJobId(resumed.job_id);
+                              setSummRunning(true);
+                              pollSummStatus(resumed.job_id);
+                            }
+                          } catch (err) {
+                            setJobsError(err instanceof Error ? err.message : "Failed to resume job");
+                          }
+                        }}
+                      >
+                        Resume
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 };

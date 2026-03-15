@@ -204,6 +204,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
           <ChatPanel
             paper={selectedPaperDetail}
             settings={settings}
+            onJumpToPaper={(paperId) => {
+              setSelectedPaperId(paperId);
+            }}
           />
         </div>
       </div>

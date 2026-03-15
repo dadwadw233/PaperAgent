@@ -1,4 +1,4 @@
-import { PaperDetail, PaperListResponse, Settings } from "./types";
+import { ChatResponse, PaperDetail, PaperListResponse, PipelineJob, Settings } from "./types";
 
 function buildUrl(base: string, path: string, params?: Record<string, string | number | undefined>) {
   const url = new URL(path, base.endsWith("/") ? base : `${base}/`);
@@ -60,8 +60,21 @@ export async function updateConfig(
 
 export async function chatWithPaper(
   settings: Settings,
-  payload: { query: string; paper_id?: number; top_k?: number; use_embeddings?: boolean; send_full_text?: boolean; max_chunks?: number },
-): Promise<{ answer: string; contexts: any[] }> {
+  payload: {
+    query: string;
+    scope?: "library" | "paper";
+    paper_id?: number;
+    candidate_k?: number;
+    final_k?: number;
+    rerank?: boolean;
+    require_citations?: boolean;
+    // Legacy compatibility
+    top_k?: number;
+    use_embeddings?: boolean;
+    send_full_text?: boolean;
+    max_chunks?: number;
+  },
+): Promise<ChatResponse> {
   const url = buildUrl(settings.apiBase, "/chat");
   const res = await fetch(url, {
     method: "POST",
@@ -270,6 +283,43 @@ export async function clearSummary(settings: Settings, paperId: number): Promise
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Clear summary failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export async function fetchPipelineJobs(
+  settings: Settings,
+  params?: { limit?: number; job_type?: string },
+): Promise<PipelineJob[]> {
+  const url = buildUrl(settings.apiBase, "/pipeline/jobs", params);
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Pipeline jobs failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.items || [];
+}
+
+export async function fetchPipelineJob(settings: Settings, jobId: string): Promise<PipelineJob> {
+  const url = buildUrl(settings.apiBase, `/pipeline/jobs/${jobId}`);
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Pipeline job detail failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+export async function resumePipelineJob(settings: Settings, jobId: string): Promise<{ job_id: string }> {
+  const url = buildUrl(settings.apiBase, `/pipeline/jobs/${jobId}/resume`);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Pipeline resume failed (${res.status}): ${text}`);
   }
   return res.json();
 }

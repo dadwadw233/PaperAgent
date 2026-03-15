@@ -1005,7 +1005,8 @@ textarea:focus {
 
 .chat-options {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px 24px;
   background: var(--card);

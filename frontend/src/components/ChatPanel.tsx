@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { chatWithPaper } from "../api";
-import { PaperDetail, Settings } from "../types";
+import { ChatCitation, ChatRetrievalMeta, PaperDetail, Settings } from "../types";
 
 interface Props {
   paper: PaperDetail | null;
   settings: Settings;
+  onJumpToPaper?: (paperId: number) => void;
 }
 
 interface Message {
@@ -12,19 +13,44 @@ interface Message {
   content: string;
 }
 
-export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
+export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [useEmbeddings, setUseEmbeddings] = useState(false);
-  const [sendFullText, setSendFullText] = useState(false);
-  const [maxChunks, setMaxChunks] = useState(4);
-  const disabled = !paper;
+  const [scope, setScope] = useState<"library" | "paper">("library");
+  const [usePaperFilter, setUsePaperFilter] = useState(false);
+  const [candidateK, setCandidateK] = useState(20);
+  const [finalK, setFinalK] = useState(6);
+  const [rerank, setRerank] = useState(true);
+  const [requireCitations, setRequireCitations] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugSendFullText, setDebugSendFullText] = useState(false);
+  const [latestCitations, setLatestCitations] = useState<ChatCitation[]>([]);
+  const [latestMeta, setLatestMeta] = useState<ChatRetrievalMeta | null>(null);
+
+  const candidateKMin = finalK;
+  const canUsePaperMode = Boolean(paper?.id);
+  const effectivePaperId = useMemo(() => {
+    if (scope === "paper") {
+      return paper?.id;
+    }
+    if (usePaperFilter) {
+      return paper?.id;
+    }
+    return undefined;
+  }, [scope, usePaperFilter, paper?.id]);
 
   const send = async () => {
     if (!input.trim()) return;
-    if (!paper) return;
+    if (scope === "paper" && !paper?.id) {
+      setError("Paper mode requires selecting a paper.");
+      return;
+    }
+    if (debugSendFullText && !paper?.id) {
+      setError("Debug full-text mode requires selecting a paper.");
+      return;
+    }
     setError(null);
     const prompt = input.trim();
     setInput("");
@@ -33,31 +59,22 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
     try {
       const resp = await chatWithPaper(settings, {
         query: prompt,
-        paper_id: paper?.id,
-        top_k: 4,
-        use_embeddings: useEmbeddings,
-        send_full_text: sendFullText,
-        max_chunks: sendFullText ? undefined : maxChunks,
+        scope: debugSendFullText ? "paper" : scope,
+        paper_id: debugSendFullText ? paper?.id : effectivePaperId,
+        candidate_k: Math.max(candidateK, finalK),
+        final_k: finalK,
+        rerank,
+        require_citations: requireCitations,
+        send_full_text: showDebug && debugSendFullText ? true : undefined,
       });
-      // Generate concise context summary
-      let ctxSummary = "";
-      if (resp.contexts && resp.contexts.length > 0) {
-        const count = resp.contexts.length;
-        if (count <= 5) {
-          // Show detailed list for small number of chunks
-          ctxSummary = resp.contexts
-            .map((c: any, idx: number) => `[${idx + 1}] seq ${c.seq}`)
-            .join(", ");
-        } else {
-          // Show concise summary for large number of chunks
-          const firstSeq = resp.contexts[0]?.seq;
-          const lastSeq = resp.contexts[count - 1]?.seq;
-          ctxSummary = `${count} chunks (seq ${firstSeq}-${lastSeq})`;
-        }
-      }
+      setLatestCitations(resp.citations || []);
+      setLatestMeta(resp.retrieval_meta || null);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: resp.answer + (ctxSummary ? `\n\n(Context: ${ctxSummary})` : "") },
+        {
+          role: "assistant",
+          content: resp.answer,
+        },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Chat failed");
@@ -72,69 +89,121 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span className="chat-title">Conversation</span>
           {loading && <span className="pill info">Processing...</span>}
-          {paper && paper.chunks_count !== undefined && (
-            <span className="pill" style={{ fontSize: "0.85em" }}>
-              {paper.chunks_count} chunks available
-            </span>
+          <span className="pill info">Default: Library RAG</span>
+          {paper?.id ? (
+            <span className="pill">Selected paper #{paper.id}</span>
+          ) : (
+            <span className="pill">No paper selected</span>
           )}
         </div>
-        {!paper && <span className="pill warn">Select a paper first</span>}
       </div>
+
       <div className="chat-options">
         <label className="checkbox-label">
           <input
-            type="checkbox"
-            checked={useEmbeddings}
-            onChange={(e) => setUseEmbeddings(e.target.checked)}
-            disabled={disabled || loading}
+            type="radio"
+            checked={scope === "library"}
+            onChange={() => setScope("library")}
+            disabled={loading}
           />
-          <span>Use vector search</span>
+          <span>Library scope</span>
         </label>
-        <span className="muted">Retrieve relevant chunks by similarity (requires embeddings)</span>
-
-        <label className="checkbox-label" style={{ marginTop: "8px" }}>
+        <label className="checkbox-label">
+          <input
+            type="radio"
+            checked={scope === "paper"}
+            onChange={() => setScope("paper")}
+            disabled={!canUsePaperMode || loading}
+          />
+          <span>Current paper only</span>
+        </label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
-            checked={sendFullText}
-            onChange={(e) => setSendFullText(e.target.checked)}
-            disabled={disabled || loading}
+            checked={usePaperFilter}
+            onChange={(e) => setUsePaperFilter(e.target.checked)}
+            disabled={!canUsePaperMode || scope === "paper" || loading}
           />
-          <span>Send full text</span>
+          <span>Filter library by selected paper</span>
         </label>
-        <span className="muted">Send all chunks from the paper (may be very long)</span>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={rerank}
+            onChange={(e) => setRerank(e.target.checked)}
+            disabled={loading}
+          />
+          <span>Enable rerank</span>
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={requireCitations}
+            onChange={(e) => setRequireCitations(e.target.checked)}
+            disabled={loading}
+          />
+          <span>Require citations</span>
+        </label>
+      </div>
 
-        {!sendFullText && (
-          <div style={{ marginTop: "12px" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ minWidth: "100px" }}>Chunks: {maxChunks}</span>
-              <input
-                type="range"
-                min="1"
-                max={paper?.chunks_count || 50}
-                value={Math.min(maxChunks, paper?.chunks_count || 50)}
-                onChange={(e) => setMaxChunks(Number(e.target.value))}
-                disabled={disabled || loading}
-                style={{ flex: 1 }}
-              />
-            </label>
-            <span className="muted">
-              Adjust how many chunks to send (1-{paper?.chunks_count || 50}
-              {paper && ` total`})
-            </span>
-          </div>
+      <div className="chat-options" style={{ borderTop: "1px solid var(--border)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", width: "50%" }}>
+          <span style={{ minWidth: "120px" }}>Candidate K: {candidateK}</span>
+          <input
+            type="range"
+            min={candidateKMin}
+            max={50}
+            value={candidateK}
+            onChange={(e) => setCandidateK(Number(e.target.value))}
+            disabled={loading}
+            style={{ flex: 1 }}
+          />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", width: "50%" }}>
+          <span style={{ minWidth: "90px" }}>Final K: {finalK}</span>
+          <input
+            type="range"
+            min={1}
+            max={12}
+            value={finalK}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setFinalK(next);
+              if (candidateK < next) {
+                setCandidateK(next);
+              }
+            }}
+            disabled={loading}
+            style={{ flex: 1 }}
+          />
+        </label>
+      </div>
+
+      <div className="chat-options" style={{ borderTop: "1px solid var(--border)" }}>
+        <button className="ghost-btn" onClick={() => setShowDebug((prev) => !prev)} disabled={loading}>
+          {showDebug ? "Hide debug options" : "Show debug options"}
+        </button>
+        {showDebug && (
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={debugSendFullText}
+              onChange={(e) => setDebugSendFullText(e.target.checked)}
+              disabled={loading}
+            />
+            <span>Debug: send full text (legacy)</span>
+          </label>
         )}
       </div>
+
       <div className="chat-messages">
-        {messages.length === 0 && !paper && (
-          <div className="empty">Select a paper and start chatting</div>
-        )}
-        {messages.length === 0 && paper && (
+        {messages.length === 0 && (
           <div className="chat-row">
             <div className="role">system</div>
             <div className="bubble">
-              Paper loaded: <strong>{paper.title}</strong>
+              Ask questions directly in library mode, or select a paper and switch to paper mode.
               <br />
-              <span className="muted">You can now ask questions about this paper.</span>
+              <span className="muted">Answers are grounded with citations by default.</span>
             </div>
           </div>
         )}
@@ -151,9 +220,46 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
           </div>
         )}
       </div>
+
+      {(latestMeta || latestCitations.length > 0) && (
+        <div className="summary-block" style={{ margin: "0 24px 16px 24px" }}>
+          <h4>Retrieval Meta</h4>
+          {latestMeta && (
+            <div className="muted" style={{ marginBottom: 8 }}>
+              scope={latestMeta.scope}, candidate_k={latestMeta.candidate_k}, final_k={latestMeta.final_k_used}/
+              {latestMeta.final_k_requested}, rerank={latestMeta.rerank_enabled ? "on" : "off"}, total=
+              {latestMeta.timings_ms.total}ms
+            </div>
+          )}
+          {latestCitations.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              {latestCitations.map((citation) => (
+                <div key={citation.index} className="card compact" style={{ cursor: "default" }}>
+                  <div className="card-title" style={{ fontSize: 13 }}>
+                    [{citation.index}] paper {citation.paper_id ?? "?"} · seq {citation.seq ?? "?"}
+                  </div>
+                  <div className="muted">{citation.snippet}</div>
+                  <div className="muted">
+                    score(vector={citation.score?.vector != null ? citation.score.vector.toFixed(4) : "n/a"}, rerank=
+                    {citation.score?.rerank != null ? citation.score.rerank.toFixed(4) : "n/a"})
+                  </div>
+                  {citation.paper_id && onJumpToPaper && (
+                    <div style={{ marginTop: 6 }}>
+                      <button className="ghost-btn" onClick={() => onJumpToPaper(citation.paper_id!)}>
+                        Jump to paper {citation.paper_id}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="chat-input">
         <textarea
-          placeholder={disabled ? "Select a paper to start chatting" : "Ask a question about this paper..."}
+          placeholder="Ask a question about your papers..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -162,9 +268,9 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings }) => {
               send();
             }
           }}
-          disabled={disabled || loading}
+          disabled={loading}
         />
-        <button className="primary-btn" onClick={send} disabled={disabled || loading || !input.trim()}>
+        <button className="primary-btn" onClick={send} disabled={loading || !input.trim()}>
           Send
         </button>
       </div>
