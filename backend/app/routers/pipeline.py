@@ -19,10 +19,11 @@ from backend.app.services.pipeline import (
     get_embed_status,
     stop_process_pdfs_job,
     stop_embed_job,
-    embed_jobs,
+    list_pipeline_jobs,
+    get_pipeline_job,
+    resume_pipeline_job,
 )
 from backend.scripts.dedupe_attachments import dedupe as dedupe_attachments
-from backend.scripts.summarize_papers import process_papers as summarize_papers
 from backend.app.routers.config import read_config
 from chromadb import Client
 from chromadb.config import Settings
@@ -168,6 +169,27 @@ def summarize_stop(req: JobStopRequest):
     return status
 
 
+@router.get("/jobs")
+def pipeline_jobs(limit: int = Query(default=50, ge=1, le=200), job_type: Optional[str] = Query(default=None)):
+    return {"items": list_pipeline_jobs(limit=limit, job_type=job_type)}
+
+
+@router.get("/jobs/{job_id}")
+def pipeline_job_detail(job_id: str):
+    job = get_pipeline_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
+
+
+@router.post("/jobs/{job_id}/resume")
+def pipeline_job_resume(job_id: str):
+    resumed = resume_pipeline_job(job_id)
+    if "error" in resumed:
+        raise HTTPException(status_code=400, detail=resumed["error"])
+    return resumed
+
+
 def get_db_session():
     engine = create_db_engine()
     with get_session(engine) as session:
@@ -196,30 +218,8 @@ def pipeline_stats(session: Session = Depends(get_db_session), sample_missing: i
     papers_with_summary = {row.paper_id for row in summary_rows}
     missing_summary = len(papers_with_pdf - papers_with_summary)
 
-    embed_snapshot = None
-    embed_list = []
-    if embed_jobs:
-        # pick latest job
-        last_job_id = list(embed_jobs.keys())[-1]
-        snap = embed_jobs.get(last_job_id)
-        if snap:
-            embed_snapshot = {
-                "job_id": last_job_id,
-                "running": snap.running,
-                "returncode": snap.returncode,
-                "stats": snap.stats,
-                "last_message": snap.last_message,
-            }
-        for jid, st in embed_jobs.items():
-            embed_list.append(
-                {
-                    "job_id": jid,
-                    "running": st.running,
-                    "returncode": st.returncode,
-                    "stats": st.stats,
-                    "last_message": st.last_message,
-                }
-            )
+    embed_list = list_pipeline_jobs(limit=20, job_type="embed_chunks")
+    embed_snapshot = embed_list[0] if embed_list else None
     total_chunks_db = session.exec(select(func.count()).select_from(Chunk)).one()
     # Estimate embedded count from Chroma collection (non-fatal).
     embed_estimate = None

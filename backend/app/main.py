@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import create_db_engine, init_db
 from .routers import papers, config, chat, import_csv, pipeline
+from .services.pipeline import mark_running_jobs_interrupted
 
 
 def create_app() -> FastAPI:
@@ -32,4 +33,6 @@ def create_app() -> FastAPI:
 app = create_app()
 
 # Initialize DB on import for now; can be moved to startup event later.
-init_db(create_db_engine())
+engine = create_db_engine()
+init_db(engine)
+mark_running_jobs_interrupted()

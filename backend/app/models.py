@@ -67,3 +67,20 @@ class Tag(SQLModel, table=True):
     tag_type: str = Field(index=True)  # e.g., domain/task/keyword
     value: str = Field(index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class JobRun(SQLModel, table=True):
+    id: str = Field(primary_key=True, index=True)
+    job_type: str = Field(index=True)
+    status: str = Field(index=True)
+    params_json: str = Field(default="{}")
+    progress_json: str = Field(default="{}")
+    result_json: Optional[str] = Field(default=None)
+    error_type: Optional[str] = Field(default=None, index=True)
+    error_message: Optional[str] = Field(default=None)
+    last_message: Optional[str] = Field(default=None)
+    log_path: Optional[str] = Field(default=None)
+    resumed_from_id: Optional[str] = Field(default=None, index=True)
+    started_at: Optional[datetime] = Field(default=None, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    finished_at: Optional[datetime] = Field(default=None, index=True)
