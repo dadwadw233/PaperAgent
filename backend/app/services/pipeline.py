@@ -731,6 +731,36 @@ def get_pipeline_job(job_id: str) -> Optional[Dict[str, Any]]:
     return _serialize_job(row, include_log=True)
 
 
+def delete_pipeline_job(job_id: str) -> Dict[str, Any]:
+    row = _fetch_job_row(job_id)
+    if not row:
+        return {"error": "job not found"}
+    if _is_running_status(row.status):
+        return {"error": f"cannot delete running job (status={row.status})"}
+
+    log_path = row.log_path
+    engine = create_db_engine()
+    with Session(engine) as session:
+        target = session.get(JobRun, job_id)
+        if not target:
+            return {"error": "job not found"}
+        session.delete(target)
+        session.commit()
+
+    jobs.pop(job_id, None)
+    summarize_jobs.pop(job_id, None)
+    embed_jobs.pop(job_id, None)
+
+    if log_path:
+        try:
+            p = Path(log_path)
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
+    return {"status": "deleted", "job_id": job_id}
+
+
 def resume_pipeline_job(job_id: str) -> Dict[str, Any]:
     row = _fetch_job_row(job_id)
     if not row:

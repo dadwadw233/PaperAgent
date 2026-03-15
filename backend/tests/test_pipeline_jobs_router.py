@@ -47,3 +47,23 @@ def test_pipeline_job_resume_error(monkeypatch):
     resp = client.post("/pipeline/jobs/unknown/resume")
     assert resp.status_code == 400
     assert "job not found" in resp.json()["detail"]
+
+
+def test_pipeline_job_delete_success(monkeypatch):
+    monkeypatch.setattr(pipeline_router, "delete_pipeline_job", lambda job_id: {"status": "deleted", "job_id": job_id})
+    client = build_client()
+    resp = client.delete("/pipeline/jobs/job-1")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+
+
+def test_pipeline_job_delete_error(monkeypatch):
+    monkeypatch.setattr(
+        pipeline_router,
+        "delete_pipeline_job",
+        lambda job_id: {"error": "cannot delete running job (status=running)"},
+    )
+    client = build_client()
+    resp = client.delete("/pipeline/jobs/job-running")
+    assert resp.status_code == 400
+    assert "cannot delete running job" in resp.json()["detail"]

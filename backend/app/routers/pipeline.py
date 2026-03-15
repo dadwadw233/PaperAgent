@@ -21,6 +21,7 @@ from backend.app.services.pipeline import (
     stop_embed_job,
     list_pipeline_jobs,
     get_pipeline_job,
+    delete_pipeline_job,
     resume_pipeline_job,
 )
 from backend.scripts.dedupe_attachments import dedupe as dedupe_attachments
@@ -188,6 +189,16 @@ def pipeline_job_resume(job_id: str):
     if "error" in resumed:
         raise HTTPException(status_code=400, detail=resumed["error"])
     return resumed
+
+
+@router.delete("/jobs/{job_id}")
+def pipeline_job_delete(job_id: str):
+    deleted = delete_pipeline_job(job_id)
+    if "error" in deleted:
+        if deleted["error"] == "job not found":
+            raise HTTPException(status_code=404, detail=deleted["error"])
+        raise HTTPException(status_code=400, detail=deleted["error"])
+    return deleted
 
 
 def get_db_session():
