@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { CsvUploader } from "../components/CsvUploader";
 import { PipelinePanel } from "../components/PipelinePanel";
+import { PageLoader } from "../components/PageLoader";
 import { Settings } from "../types";
 import { fetchPapers } from "../api";
 
@@ -10,7 +11,7 @@ interface ManagementPageProps {
 
 export const ManagementPage: React.FC<ManagementPageProps> = ({ settings }) => {
   const [stats, setStats] = useState({ total: 0, lastUpdate: "" });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const loadStats = async () => {
     setLoading(true);
@@ -31,6 +32,8 @@ export const ManagementPage: React.FC<ManagementPageProps> = ({ settings }) => {
     loadStats();
   }, [settings.apiBase]);
 
+  const showInitialLoader = loading && !stats.lastUpdate;
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -43,51 +46,55 @@ export const ManagementPage: React.FC<ManagementPageProps> = ({ settings }) => {
         </button>
       </div>
 
-      <div className="management-layout">
-        {/* Statistics Section */}
-        <div className="management-section">
-          <h2 className="management-section-title">Statistics</h2>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-label">Total Papers</div>
-              <div className="stat-value">{loading ? "..." : stats.total.toLocaleString()}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Last Updated</div>
-              <div className="stat-value" style={{ fontSize: "18px" }}>
-                {stats.lastUpdate || "N/A"}
+      {showInitialLoader ? (
+        <PageLoader title="Loading management dashboard" subtitle="Collecting library and pipeline statistics..." />
+      ) : (
+        <div className="management-layout">
+          {/* Statistics Section */}
+          <div className="management-section">
+            <h2 className="management-section-title">Statistics</h2>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-label">Total Papers</div>
+                <div className="stat-value">{loading ? "..." : stats.total.toLocaleString()}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Last Updated</div>
+                <div className="stat-value" style={{ fontSize: "18px" }}>
+                  {stats.lastUpdate || "N/A"}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Import Section */}
-        <div className="management-section">
-          <h2 className="management-section-title">Import Data</h2>
-          <div className="action-grid">
-            <div className="action-card">
-              <div className="action-card-header">
-                <h3 className="action-card-title">CSV Import</h3>
-              </div>
-              <div className="action-card-body">
-                <p className="action-description">
-                  Upload a Zotero CSV export file to import papers into the database.
-                  The CSV should contain paper metadata including titles, authors, DOIs, and file attachments.
-                </p>
-                <CsvUploader settings={settings} onUploaded={loadStats} />
+          {/* Import Section */}
+          <div className="management-section">
+            <h2 className="management-section-title">Import Data</h2>
+            <div className="action-grid">
+              <div className="action-card">
+                <div className="action-card-header">
+                  <h3 className="action-card-title">CSV Import</h3>
+                </div>
+                <div className="action-card-body">
+                  <p className="action-description">
+                    Upload a Zotero CSV export file to import papers into the database.
+                    The CSV should contain paper metadata including titles, authors, DOIs, and file attachments.
+                  </p>
+                  <CsvUploader settings={settings} onUploaded={loadStats} />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Processing Pipeline Section */}
-        <div className="management-section">
-          <h2 className="management-section-title">Processing Pipeline</h2>
-          <div className="action-grid">
-            <PipelinePanel settings={settings} onSummaryFinished={loadStats} />
+          {/* Processing Pipeline Section */}
+          <div className="management-section">
+            <h2 className="management-section-title">Processing Pipeline</h2>
+            <div className="action-grid">
+              <PipelinePanel settings={settings} onSummaryFinished={loadStats} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

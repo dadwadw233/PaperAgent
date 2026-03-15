@@ -3,6 +3,7 @@ import { fetchPaperDetail, fetchPapers } from "../api";
 import { SearchBar } from "../components/SearchBar";
 import { PaperList } from "../components/PaperList";
 import { PaperDetailPanel } from "../components/PaperDetail";
+import { PageLoader } from "../components/PageLoader";
 import { PaperDetail, PaperListItem, Settings } from "../types";
 
 const PAGE_SIZE = 20;
@@ -17,7 +18,7 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
   const [searchField, setSearchField] = useState("title_abstract_authors");
   const [papers, setPapers] = useState<PaperListItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [listLoading, setListLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -95,6 +96,8 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
     }
   }, [selectedId, settings.apiBase]);
 
+  const showInitialLoader = listLoading && papers.length === 0 && !listError;
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -122,33 +125,37 @@ export const PapersPage: React.FC<PapersPageProps> = ({ settings }) => {
 
       {listError && <div className="error-banner">{listError}</div>}
 
-      <div className="papers-layout">
-        <div className="papers-list-section">
-          <PaperList
-            items={papers}
-            total={total}
-            loading={listLoading}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onLoadMore={loadMore}
-            canLoadMore={!listLoading && papers.length < total}
-            loadingMore={loadMoreLoading}
-          />
+      {showInitialLoader ? (
+        <PageLoader title="Loading paper library" subtitle="Fetching papers and metadata..." />
+      ) : (
+        <div className="papers-layout">
+          <div className="papers-list-section">
+            <PaperList
+              items={papers}
+              total={total}
+              loading={listLoading}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onLoadMore={loadMore}
+              canLoadMore={!listLoading && papers.length < total}
+              loadingMore={loadMoreLoading}
+            />
+          </div>
+          <div className="papers-detail-section">
+            <PaperDetailPanel
+              detail={detail}
+              loading={detailLoading}
+              error={detailError}
+              settings={settings}
+              onCleared={() => {
+                if (selectedId) {
+                  loadDetail(selectedId);
+                }
+              }}
+            />
+          </div>
         </div>
-        <div className="papers-detail-section">
-          <PaperDetailPanel
-            detail={detail}
-            loading={detailLoading}
-            error={detailError}
-            settings={settings}
-            onCleared={() => {
-              if (selectedId) {
-                loadDetail(selectedId);
-              }
-            }}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 };
