@@ -3,6 +3,19 @@ from pathlib import Path
 from backend.scripts import release_gate
 
 
+def test_frontend_gate_commands_default_order():
+    commands = release_gate.frontend_gate_commands()
+    assert commands == [
+        ["npm", "--prefix", "frontend", "run", "test:run"],
+        ["npm", "--prefix", "frontend", "run", "build"],
+    ]
+
+
+def test_parse_args_supports_skip_frontend():
+    args = release_gate.parse_args(["--skip-frontend"])
+    assert args.skip_frontend is True
+
+
 def test_choose_cases_path_prefers_explicit(tmp_path):
     explicit = tmp_path / "custom.json"
     explicit.write_text("[]", encoding="utf-8")

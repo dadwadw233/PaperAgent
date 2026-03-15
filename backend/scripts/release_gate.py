@@ -25,6 +25,13 @@ def run(cmd: List[str], label: str):
         raise SystemExit(completed.returncode)
 
 
+def frontend_gate_commands() -> List[List[str]]:
+    return [
+        ["npm", "--prefix", "frontend", "run", "test:run"],
+        ["npm", "--prefix", "frontend", "run", "build"],
+    ]
+
+
 def choose_cases_path(explicit_cases: Optional[Path]) -> Path:
     if explicit_cases:
         return explicit_cases
@@ -81,16 +88,17 @@ def compare_against_previous(previous: Dict[str, Any], current: Dict[str, Any]) 
     return regressions
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run local release gate checks.")
     parser.add_argument("--api-base", default="http://127.0.0.1:8000")
     parser.add_argument("--skip-eval", action="store_true")
+    parser.add_argument("--skip-frontend", action="store_true")
     parser.add_argument("--skip-regression-check", action="store_true")
     parser.add_argument("--cases", type=Path, default=None)
     parser.add_argument("--eval-workers", type=int, default=3)
     parser.add_argument("--eval-timeout", type=int, default=180)
     parser.add_argument("--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main():
@@ -98,6 +106,9 @@ def main():
 
     run([sys.executable, "-m", "compileall", "backend"], "Compile check")
     run([sys.executable, "-m", "pytest", "backend/tests", "-q"], "Backend tests")
+    if not args.skip_frontend:
+        for cmd, label in zip(frontend_gate_commands(), ["Frontend tests", "Frontend build"]):
+            run(cmd, label)
 
     if args.skip_eval:
         print("\n[PASS] Release gate completed (evaluation skipped).")
