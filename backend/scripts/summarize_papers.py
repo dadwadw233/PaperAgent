@@ -3,12 +3,12 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 
-import httpx
 from sqlalchemy import func
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, init_db
 from backend.app.models import Chunk, Paper, Summary, Tag
+from backend.app.services.http_client import ExternalServiceError, post_json_with_retry
 
 
 def get_llm_config() -> Dict[str, str]:
@@ -74,14 +74,10 @@ def call_llm(prompt: str, cfg: Dict[str, str]) -> Dict[str, any]:
         # Hint the API to return a JSON object if supported (OpenAI-style).
         "response_format": {"type": "json_object"},
     }
-    resp = httpx.post(url, headers=headers, json=payload, timeout=120)
-    resp.raise_for_status()
     try:
-        data = resp.json()
-    except Exception:
-        raise RuntimeError(
-            f"Invalid JSON from LLM (status {resp.status_code}): {resp.text[:500]}"
-        )
+        data = post_json_with_retry(url, headers=headers, payload=payload, timeout=120, retries=2)
+    except ExternalServiceError as exc:
+        raise RuntimeError(f"LLM request failed ({exc.category}): {exc.message}")
     try:
         content = data["choices"][0]["message"]["content"]
     except Exception:

@@ -3,13 +3,13 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-import httpx
 from chromadb import Client
 from chromadb.config import Settings
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, init_db
 from backend.app.models import Chunk, Paper
+from backend.app.services.http_client import ExternalServiceError, post_json_with_retry
 
 
 def get_chroma_client(persist_directory: str) -> Client:
@@ -45,9 +45,10 @@ def embed_chunks(
         headers = {"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"}
         payload = {"model": cfg["model"], "input": texts}
         url = cfg["base_url"].rstrip("/") + "/embeddings"
-        resp = httpx.post(url, headers=headers, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
+        try:
+            data = post_json_with_retry(url, headers=headers, payload=payload, timeout=60, retries=2)
+        except ExternalServiceError as exc:
+            raise RuntimeError(f"Embedding request failed ({exc.category}): {exc.message}") from exc
         # Expect OpenAI-style response: {"data": [{"embedding": [...]}]}
         return [item["embedding"] for item in data["data"]]
 
