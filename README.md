@@ -177,6 +177,24 @@ TS=$(date +%Y%m%d-%H%M%S)
 ./.venv/bin/python backend/scripts/release_gate.py --api-base http://127.0.0.1:8000
 ```
 
+`release_gate.py` 默认行为：
+- 优先使用 `backend/eval/rag_eval_cases_baseline_1500.json`（不存在时回退到 `backend/eval/rag_eval_cases.json`）。
+- 每次评测自动写入 `backend/eval/reports/rag-baseline-<timestamp>.{json,md}`。
+- 自动与上一份基线 JSON 报告对比，若出现指标回退则阻断发布。
+
+可选参数示例：
+
+```bash
+# 跳过“与上一份报告对比”
+./.venv/bin/python backend/scripts/release_gate.py --skip-regression-check
+
+# 指定评测集与并发参数
+./.venv/bin/python backend/scripts/release_gate.py \
+  --cases backend/eval/rag_eval_cases_baseline_1500.json \
+  --eval-workers 3 \
+  --eval-timeout 180
+```
+
 ### 常见问题
 
 - **后端启动报 `sqlmodel/uvicorn` 未找到**：请确保使用 `.venv` 中的 Python；推荐直接运行 `./start_app.sh`。
