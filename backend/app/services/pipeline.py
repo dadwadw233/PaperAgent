@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import time
 import uuid
@@ -10,7 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine
-from backend.app.models import JobRun
+from backend.app.models import ConfigEntry, JobRun
 from backend.scripts.embed_chunks import (
     embed_chunks as embed_chunks_fn,
     fetch_chunks,
@@ -64,6 +65,24 @@ def _classify_error(exc: Exception) -> str:
     if "http_status" in text:
         return "upstream_http_error"
     return exc.__class__.__name__
+
+
+def _load_config_values(keys: List[str]) -> Dict[str, str]:
+    engine = create_db_engine()
+    with Session(engine) as session:
+        rows = session.exec(select(ConfigEntry).where(ConfigEntry.key.in_(keys))).all()
+    return {row.key: row.value for row in rows if row.value}
+
+
+def _hydrate_env_from_config(keys: List[str]) -> None:
+    config_map = _load_config_values(keys)
+    for key in keys:
+        current = os.getenv(key)
+        if current and current.strip():
+            continue
+        value = config_map.get(key)
+        if value and value.strip():
+            os.environ[key] = value
 
 
 class JobStatus:
@@ -583,6 +602,7 @@ def start_summarize_job(
     dry_run: bool,
     resumed_from_id: Optional[str] = None,
 ) -> str:
+    _hydrate_env_from_config(["LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY"])
     job_id = str(uuid.uuid4())
     log_path = JOB_DIR / f"{job_id}.log"
     status = JobStatus()
@@ -627,6 +647,16 @@ def start_embed_job(
     skip_existing: bool = True,
     resumed_from_id: Optional[str] = None,
 ) -> str:
+    _hydrate_env_from_config(
+        [
+            "EMBED_BASE_URL",
+            "EMBED_MODEL",
+            "EMBED_API_KEY",
+            "LLM_BASE_URL",
+            "LLM_MODEL",
+            "LLM_API_KEY",
+        ]
+    )
     job_id = str(uuid.uuid4())
     log_path = JOB_DIR / f"{job_id}.log"
     status = JobStatus()
