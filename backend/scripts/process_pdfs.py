@@ -213,6 +213,9 @@ def ingest_pdfs(
                 total_inserted += inserted
                 total_skipped += skipped
                 processed_pdfs += 1
+                # Commit PDF-level inserts before reporting progress so JobRun updates
+                # are not blocked by an open write transaction on chunks.
+                session.commit()
                 if progress_cb:
                     progress_cb(
                         {
@@ -225,7 +228,6 @@ def ingest_pdfs(
                             "missing_files": missing_files,
                         }
                     )
-            session.commit()
             if progress_cb:
                 progress_cb(
                     {

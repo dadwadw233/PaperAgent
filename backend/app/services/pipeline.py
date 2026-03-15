@@ -1,10 +1,12 @@
 import json
 import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine
@@ -191,29 +193,42 @@ def _update_job_record(
     error_message: Optional[str] = None,
     last_message: Optional[str] = None,
     finished: bool = False,
-):
+    best_effort: bool = False,
+) -> bool:
     engine = create_db_engine()
-    with Session(engine) as session:
-        row = session.get(JobRun, job_id)
-        if not row:
-            return
-        if status is not None:
-            row.status = status
-        if progress is not None:
-            row.progress_json = _json_dumps(progress)
-        if result is not None:
-            row.result_json = _json_dumps(result)
-        if error_type is not None:
-            row.error_type = error_type
-        if error_message is not None:
-            row.error_message = error_message
-        if last_message is not None:
-            row.last_message = last_message
-        row.updated_at = _utcnow()
-        if finished:
-            row.finished_at = _utcnow()
-        session.add(row)
-        session.commit()
+    for attempt in range(6):
+        try:
+            with Session(engine) as session:
+                row = session.get(JobRun, job_id)
+                if not row:
+                    return False
+                if status is not None:
+                    row.status = status
+                if progress is not None:
+                    row.progress_json = _json_dumps(progress)
+                if result is not None:
+                    row.result_json = _json_dumps(result)
+                if error_type is not None:
+                    row.error_type = error_type
+                if error_message is not None:
+                    row.error_message = error_message
+                if last_message is not None:
+                    row.last_message = last_message
+                row.updated_at = _utcnow()
+                if finished:
+                    row.finished_at = _utcnow()
+                session.add(row)
+                session.commit()
+                return True
+        except OperationalError as exc:
+            locked = "locked" in str(exc).lower()
+            if locked and attempt < 5:
+                time.sleep(0.08 * (attempt + 1))
+                continue
+            if locked and best_effort:
+                return False
+            raise
+    return False
 
 
 def _serialize_job(row: JobRun, include_log: bool = True) -> Dict[str, Any]:
@@ -296,6 +311,7 @@ def _run_process_job(
                 status=JOB_STATUS_RUNNING,
                 progress=status.stats,
                 last_message=status.last_message,
+                best_effort=True,
             )
 
         try:
@@ -368,6 +384,7 @@ def _run_summarize_job(
                 status=JOB_STATUS_RUNNING,
                 progress=status.stats,
                 last_message=status.last_message,
+                best_effort=True,
             )
 
         try:
@@ -441,6 +458,7 @@ def _run_embed_job(
                 status=JOB_STATUS_RUNNING,
                 progress=status.stats,
                 last_message=status.last_message,
+                best_effort=True,
             )
 
         try:
@@ -455,6 +473,7 @@ def _run_embed_job(
                 status=JOB_STATUS_RUNNING,
                 progress=status.stats,
                 last_message=status.last_message,
+                best_effort=True,
             )
             if total == 0:
                 status.stop(0)
