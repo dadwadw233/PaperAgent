@@ -54,6 +54,7 @@ ENGLISH_STOPWORDS = {
 VECTOR_BACKEND_DISABLED_UNTIL = 0.0
 VECTOR_BACKEND_DISABLED_REASON = ""
 VECTOR_BACKEND_COOLDOWN_SECONDS = 900
+LEGACY_CHAT_FIELDS_REMOVAL_DATE = "2026-06-30"
 
 
 class ChatRequest(BaseModel):
@@ -151,21 +152,31 @@ def normalize_chat_options(req: ChatRequest) -> Dict[str, Any]:
     scope = (req.scope or "library").strip().lower()
     if scope not in {"library", "paper"}:
         scope = "library"
+    legacy_fields_used: List[str] = []
     final_k = max(1, min(req.final_k, 20))
     if req.top_k is not None and req.final_k == 6:
+        legacy_fields_used.append("top_k")
         final_k = max(1, min(req.top_k, 20))
     if req.max_chunks is not None and req.final_k == 6:
+        if "max_chunks" not in legacy_fields_used:
+            legacy_fields_used.append("max_chunks")
         final_k = max(1, min(req.max_chunks, 50))
+    elif req.max_chunks is not None:
+        legacy_fields_used.append("max_chunks")
     candidate_k = max(final_k, min(req.candidate_k, 100))
     rerank = bool(req.rerank)
     require_citations = bool(req.require_citations)
     legacy_direct_mode = False
 
+    if req.use_embeddings is not None:
+        legacy_fields_used.append("use_embeddings")
     if req.use_embeddings is False:
         # Keep compatibility for one version cycle.
         legacy_direct_mode = True
         scope = "paper"
         rerank = False
+    if req.send_full_text is not None:
+        legacy_fields_used.append("send_full_text")
     if req.send_full_text:
         legacy_direct_mode = True
         scope = "paper"
@@ -184,6 +195,7 @@ def normalize_chat_options(req: ChatRequest) -> Dict[str, Any]:
         "rerank": rerank,
         "require_citations": require_citations,
         "legacy_direct_mode": legacy_direct_mode,
+        "legacy_fields_used": sorted(set(legacy_fields_used)),
     }
 
 
@@ -827,6 +839,15 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         "answer_max_tokens": prompt_controls["max_tokens"],
         "llm_timeout_seconds": prompt_controls["llm_timeout_seconds"],
         "legacy_direct_mode": opts["legacy_direct_mode"],
+        "legacy_fields_used": opts["legacy_fields_used"],
+        "legacy_fields_deprecation": (
+            "Legacy chat fields "
+            "use_embeddings/send_full_text/max_chunks/top_k are deprecated and will be removed "
+            f"after {LEGACY_CHAT_FIELDS_REMOVAL_DATE}. "
+            "Use scope/paper_id/candidate_k/final_k/rerank/require_citations."
+            if opts["legacy_fields_used"]
+            else None
+        ),
         "context_char_budget": prompt_controls["char_budget"],
         "context_per_chunk_char_cap": prompt_controls["per_chunk_char_cap"],
         "timings_ms": {

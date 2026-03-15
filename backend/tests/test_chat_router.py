@@ -484,3 +484,63 @@ def test_chat_enforces_required_terms_for_challenge_evidence_query(monkeypatch):
     data = resp.json()
     assert "挑战" in data["answer"]
     assert "证据" in data["answer"]
+
+
+def test_chat_reports_legacy_field_usage_in_retrieval_meta(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "read_config",
+        lambda session: {
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_MODEL": "local-model",
+            "LLM_API_KEY": "dummy",
+            "CHROMA_PERSIST_DIR": "./chroma_store",
+            "CHROMA_COLLECTION": "paper_chunks",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "ensure_embedding_cfg",
+        lambda cfg: {"base_url": "http://localhost:11434/v1", "model": "embed-model", "api_key": "dummy"},
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "fetch_embedding_contexts",
+        lambda cfg, query, candidate_k, paper_filter_id: {
+            "contexts": [
+                {
+                    "paper_id": 99,
+                    "chunk_id": 9901,
+                    "seq": 1,
+                    "distance": 0.1,
+                    "vector_score": 0.9,
+                    "rerank_score": 0.0,
+                    "text": "Legacy compatibility context",
+                }
+            ],
+            "source_collection": "paper_chunks",
+            "persist_dir": "./chroma_store",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "call_chat",
+        lambda cfg, system_prompt, user_prompt, max_tokens=320, timeout_seconds=8: "Legacy mapping still works [1].",
+    )
+    client = build_client()
+    resp = client.post(
+        "/chat",
+        json={
+            "query": "legacy path check",
+            "scope": "library",
+            "top_k": 3,
+            "max_chunks": 12,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    used = data["retrieval_meta"]["legacy_fields_used"]
+    assert "top_k" in used
+    assert "max_chunks" in used
+    assert data["retrieval_meta"]["legacy_fields_deprecation"] is not None
+    assert "2026-06-30" in data["retrieval_meta"]["legacy_fields_deprecation"]
