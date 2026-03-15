@@ -6,6 +6,7 @@ from chromadb import Client
 from chromadb.config import Settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from backend.app.db import create_db_engine, get_session
@@ -200,6 +201,70 @@ def fetch_embedding_contexts(
     }
 
 
+def fetch_lexical_contexts(
+    session: Session,
+    query: str,
+    candidate_k: int,
+    paper_filter_id: Optional[int],
+) -> Dict[str, Any]:
+    tokens = [token for token in tokenize_for_rerank(query) if len(token) >= 2][:8]
+    scan_limit = max(candidate_k * 25, 200)
+    stmt = select(Chunk)
+    if paper_filter_id:
+        stmt = stmt.where(Chunk.paper_id == paper_filter_id)
+    if tokens:
+        stmt = stmt.where(or_(*[Chunk.content.contains(token) for token in tokens]))
+    stmt = stmt.order_by(Chunk.created_at.desc()).limit(scan_limit)
+    rows: List[Chunk] = session.exec(stmt).all()
+
+    contexts: List[Dict[str, Any]] = []
+    for row in rows:
+        text = row.content or ""
+        if not text.strip():
+            continue
+        lexical_score = local_rerank_score(query, text)
+        if tokens and lexical_score <= 0:
+            continue
+        contexts.append(
+            {
+                "paper_id": row.paper_id,
+                "chunk_id": row.id,
+                "seq": row.seq,
+                "distance": None,
+                "vector_score": lexical_score,
+                "rerank_score": 0.0,
+                "text": text,
+            }
+        )
+
+    if not contexts:
+        fallback_stmt = select(Chunk)
+        if paper_filter_id:
+            fallback_stmt = fallback_stmt.where(Chunk.paper_id == paper_filter_id)
+        fallback_stmt = fallback_stmt.order_by(Chunk.created_at.desc()).limit(candidate_k)
+        for row in session.exec(fallback_stmt).all():
+            if not (row.content or "").strip():
+                continue
+            contexts.append(
+                {
+                    "paper_id": row.paper_id,
+                    "chunk_id": row.id,
+                    "seq": row.seq,
+                    "distance": None,
+                    "vector_score": 0.0,
+                    "rerank_score": 0.0,
+                    "text": row.content,
+                }
+            )
+
+    contexts.sort(key=lambda item: item.get("vector_score", 0.0), reverse=True)
+    return {
+        "contexts": contexts[:candidate_k],
+        "persist_dir": None,
+        "source_collection": "sqlite_chunk_lexical",
+    }
+
+
 def sort_and_select_contexts(
     query: str,
     contexts: List[Dict[str, Any]],
@@ -318,6 +383,8 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     contexts: List[Dict[str, Any]] = []
     source_collection = None
     persist_dir = None
+    retrieval_backend = "direct_chunks" if opts["legacy_direct_mode"] else "vector"
+    retrieval_fallback_reason: Optional[str] = None
 
     if opts["legacy_direct_mode"]:
         contexts = build_context_from_chunks(
@@ -327,13 +394,23 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             max_chunks=opts["final_k"],
         )
     else:
-        embed_cfg = ensure_embedding_cfg(cfg)
-        search_result = fetch_embedding_contexts(
-            cfg={**cfg, **embed_cfg},
-            query=req.query,
-            candidate_k=opts["candidate_k"],
-            paper_filter_id=opts["paper_id"],
-        )
+        try:
+            embed_cfg = ensure_embedding_cfg(cfg)
+            search_result = fetch_embedding_contexts(
+                cfg={**cfg, **embed_cfg},
+                query=req.query,
+                candidate_k=opts["candidate_k"],
+                paper_filter_id=opts["paper_id"],
+            )
+        except Exception as exc:
+            search_result = fetch_lexical_contexts(
+                session=session,
+                query=req.query,
+                candidate_k=opts["candidate_k"],
+                paper_filter_id=opts["paper_id"],
+            )
+            retrieval_backend = "lexical_fallback"
+            retrieval_fallback_reason = str(exc)[:220]
         contexts = search_result["contexts"]
         source_collection = search_result["source_collection"]
         persist_dir = search_result["persist_dir"]
@@ -393,6 +470,8 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         "final_k_requested": opts["final_k"],
         "final_k_used": len(contexts),
         "rerank_enabled": opts["rerank"] and not opts["legacy_direct_mode"],
+        "retrieval_backend": retrieval_backend,
+        "retrieval_fallback_reason": retrieval_fallback_reason,
         "legacy_direct_mode": opts["legacy_direct_mode"],
         "context_char_budget": 12000,
         "timings_ms": {

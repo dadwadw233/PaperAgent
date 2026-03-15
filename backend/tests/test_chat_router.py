@@ -117,3 +117,54 @@ def test_chat_retries_once_when_citations_missing(monkeypatch):
     resp = client.post("/chat", json={"query": "Explain this.", "scope": "library"})
     assert resp.status_code == 200
     assert calls["count"] == 2
+
+
+def test_chat_falls_back_to_lexical_when_vector_retrieval_fails(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "read_config",
+        lambda session: {
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_MODEL": "local-model",
+            "LLM_API_KEY": "dummy",
+            "CHROMA_PERSIST_DIR": "./chroma_store",
+            "CHROMA_COLLECTION": "paper_chunks",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "ensure_embedding_cfg",
+        lambda cfg: {"base_url": "http://localhost:11434/v1", "model": "embed-model", "api_key": "dummy"},
+    )
+
+    def fail_vector(*args, **kwargs):
+        raise RuntimeError("chroma index load failed")
+
+    monkeypatch.setattr(chat_router, "fetch_embedding_contexts", fail_vector)
+    monkeypatch.setattr(
+        chat_router,
+        "fetch_lexical_contexts",
+        lambda session, query, candidate_k, paper_filter_id: {
+            "contexts": [
+                {
+                    "paper_id": 42,
+                    "chunk_id": 4242,
+                    "seq": 2,
+                    "distance": None,
+                    "vector_score": 0.75,
+                    "rerank_score": 0.0,
+                    "text": "Fallback lexical context that still supports grounded answers.",
+                }
+            ],
+            "source_collection": "sqlite_chunk_lexical",
+            "persist_dir": None,
+        },
+    )
+    monkeypatch.setattr(chat_router, "call_chat", lambda cfg, system_prompt, user_prompt: "Fallback answer [1].")
+
+    client = build_client()
+    resp = client.post("/chat", json={"query": "What changed?", "scope": "library"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["retrieval_meta"]["retrieval_backend"] == "lexical_fallback"
+    assert "chroma index load failed" in data["retrieval_meta"]["retrieval_fallback_reason"]
