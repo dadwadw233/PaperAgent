@@ -11,6 +11,8 @@ interface Props {
 interface Message {
   role: "user" | "assistant" | "system";
   content: string;
+  citations?: ChatCitation[];
+  retrievalMeta?: ChatRetrievalMeta | null;
 }
 
 export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) => {
@@ -26,8 +28,6 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
   const [requireCitations, setRequireCitations] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
   const [debugSendFullText, setDebugSendFullText] = useState(false);
-  const [latestCitations, setLatestCitations] = useState<ChatCitation[]>([]);
-  const [latestMeta, setLatestMeta] = useState<ChatRetrievalMeta | null>(null);
 
   const candidateKMin = finalK;
   const canUsePaperMode = Boolean(paper?.id);
@@ -56,12 +56,20 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);
     setLoading(true);
-    const replaceLatestAssistant = (content: string) => {
+    const replaceLatestAssistant = (
+      content: string,
+      payload?: { citations?: ChatCitation[]; retrievalMeta?: ChatRetrievalMeta | null },
+    ) => {
       setMessages((prev) => {
         const next = [...prev];
         for (let i = next.length - 1; i >= 0; i -= 1) {
           if (next[i].role === "assistant") {
-            next[i] = { ...next[i], content };
+            next[i] = {
+              ...next[i],
+              content,
+              citations: payload?.citations ?? next[i].citations,
+              retrievalMeta: payload?.retrievalMeta ?? next[i].retrievalMeta ?? null,
+            };
             break;
           }
         }
@@ -110,14 +118,16 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
           appendAssistantDelta(delta);
         },
         onFinal: (finalPayload) => {
-          setLatestCitations(finalPayload.citations || []);
-          setLatestMeta(finalPayload.retrieval_meta || null);
-          replaceLatestAssistant(finalPayload.answer || "");
+          replaceLatestAssistant(finalPayload.answer || "", {
+            citations: finalPayload.citations || [],
+            retrievalMeta: finalPayload.retrieval_meta || null,
+          });
         },
       });
-      setLatestCitations(resp.citations || []);
-      setLatestMeta(resp.retrieval_meta || null);
-      replaceLatestAssistant(resp.answer || "");
+      replaceLatestAssistant(resp.answer || "", {
+        citations: resp.citations || [],
+        retrievalMeta: resp.retrieval_meta || null,
+      });
     } catch (err) {
       if (streamedChars === 0) {
         try {
@@ -131,9 +141,10 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
             require_citations: requireCitations,
             send_full_text: showDebug && debugSendFullText ? true : undefined,
           });
-          setLatestCitations(fallback.citations || []);
-          setLatestMeta(fallback.retrieval_meta || null);
-          replaceLatestAssistant(fallback.answer || "");
+          replaceLatestAssistant(fallback.answer || "", {
+            citations: fallback.citations || [],
+            retrievalMeta: fallback.retrieval_meta || null,
+          });
         } catch (fallbackErr) {
           dropEmptyAssistant();
           setError(fallbackErr instanceof Error ? fallbackErr.message : "Chat failed");
@@ -274,6 +285,50 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
           <div className="chat-row" key={idx}>
             <div className="role">{m.role}</div>
             <div className="bubble">{m.content}</div>
+            {m.role === "assistant" && (m.citations?.length || 0) > 0 && (
+              <details className="assistant-source-details">
+                {(() => {
+                  const paperMap = new Map<number, { paperId: number; title: string }>();
+                  (m.citations || []).forEach((citation) => {
+                    if (citation.paper_id == null || paperMap.has(citation.paper_id)) return;
+                    paperMap.set(citation.paper_id, {
+                      paperId: citation.paper_id,
+                      title: citation.paper_title?.trim() || "Untitled",
+                    });
+                  });
+                  const papers = Array.from(paperMap.values());
+                  return (
+                    <>
+                      <summary>Sources ({papers.length} papers)</summary>
+                      <div className="assistant-source-body">
+                        {papers.map((paperSource) => (
+                          <div key={paperSource.paperId} className="assistant-source-item">
+                            <div className="assistant-source-text">
+                              <span className="assistant-source-id">#{paperSource.paperId}</span>
+                              <span className="assistant-source-title">{paperSource.title}</span>
+                            </div>
+                            {onJumpToPaper && (
+                              <button
+                                className="ghost-btn"
+                                onClick={() => onJumpToPaper(paperSource.paperId)}
+                              >
+                                Open
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {m.retrievalMeta && (
+                          <div className="assistant-source-meta">
+                            retrieval {m.retrievalMeta.timings_ms.retrieval}ms · generation{" "}
+                            {m.retrievalMeta.timings_ms.generation}ms
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </details>
+            )}
           </div>
         ))}
         {error && (
@@ -283,44 +338,6 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
           </div>
         )}
       </div>
-
-      {(latestMeta || latestCitations.length > 0) && (
-        <div className="chat-retrieval">
-          <div className="summary-block chat-retrieval-panel">
-            <h4>Retrieval Meta</h4>
-            {latestMeta && (
-              <div className="muted" style={{ marginBottom: 8 }}>
-                scope={latestMeta.scope}, candidate_k={latestMeta.candidate_k}, final_k={latestMeta.final_k_used}/
-                {latestMeta.final_k_requested}, rerank={latestMeta.rerank_enabled ? "on" : "off"}, total=
-                {latestMeta.timings_ms.total}ms
-              </div>
-            )}
-            {latestCitations.length > 0 && (
-              <div className="chat-citation-list">
-                {latestCitations.map((citation) => (
-                  <div key={citation.index} className="card compact" style={{ cursor: "default" }}>
-                    <div className="card-title" style={{ fontSize: 13 }}>
-                      [{citation.index}] paper {citation.paper_id ?? "?"} · seq {citation.seq ?? "?"}
-                    </div>
-                    <div className="muted">{citation.snippet}</div>
-                    <div className="muted">
-                      score(vector={citation.score?.vector != null ? citation.score.vector.toFixed(4) : "n/a"}, rerank=
-                      {citation.score?.rerank != null ? citation.score.rerank.toFixed(4) : "n/a"})
-                    </div>
-                    {citation.paper_id && onJumpToPaper && (
-                      <div style={{ marginTop: 6 }}>
-                        <button className="ghost-btn" onClick={() => onJumpToPaper(citation.paper_id!)}>
-                          Jump to paper {citation.paper_id}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="chat-input">
         <textarea

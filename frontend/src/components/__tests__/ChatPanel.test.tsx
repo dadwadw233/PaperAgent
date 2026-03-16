@@ -49,6 +49,7 @@ const chatResponse = {
     {
       index: 1,
       paper_id: 7,
+      paper_title: "Paper Seven",
       chunk_id: 77,
       seq: 1,
       snippet: "evidence snippet",
@@ -138,8 +139,9 @@ describe("ChatPanel", () => {
     await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "Need citation details");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Retrieval Meta")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Jump to paper 7" }));
+    expect(await screen.findByText("Sources (1 papers)")).toBeInTheDocument();
+    await user.click(screen.getByText("Sources (1 papers)"));
+    await user.click(screen.getByRole("button", { name: "Open" }));
     expect(onJump).toHaveBeenCalledWith(7);
   });
 });

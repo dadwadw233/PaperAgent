@@ -499,6 +499,31 @@ def apply_context_budget(
     return trimmed
 
 
+def attach_paper_titles(session: Session, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    paper_ids = sorted({int(row.get("paper_id")) for row in contexts if row.get("paper_id") is not None})
+    if not paper_ids:
+        return contexts
+    rows = session.exec(select(Paper.id, Paper.title).where(Paper.id.in_(paper_ids))).all()
+    title_map: Dict[int, str] = {}
+    for row in rows:
+        if isinstance(row, tuple):
+            pid = int(row[0])
+            title = row[1]
+        else:
+            pid = int(getattr(row, "id"))
+            title = getattr(row, "title", None)
+        title_map[pid] = title or ""
+
+    enriched: List[Dict[str, Any]] = []
+    for row in contexts:
+        item = dict(row)
+        paper_id = item.get("paper_id")
+        if paper_id is not None:
+            item["paper_title"] = title_map.get(int(paper_id)) or ""
+        enriched.append(item)
+    return enriched
+
+
 def build_citations(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     citations: List[Dict[str, Any]] = []
     for idx, row in enumerate(contexts, start=1):
@@ -506,6 +531,7 @@ def build_citations(contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             {
                 "index": idx,
                 "paper_id": row.get("paper_id"),
+                "paper_title": row.get("paper_title") or "",
                 "chunk_id": row.get("chunk_id"),
                 "seq": row.get("seq"),
                 "snippet": (row.get("text") or "")[:260],
@@ -856,6 +882,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         char_budget=prompt_controls["char_budget"],
         per_chunk_char_cap=prompt_controls["per_chunk_char_cap"],
     )
+    contexts = attach_paper_titles(session, contexts)
     citations = build_citations(contexts)
     retrieval_ms = int((time.perf_counter() - retrieval_started) * 1000)
 

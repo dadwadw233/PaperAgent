@@ -57,6 +57,7 @@ export interface Settings {
 export interface ChatCitation {
   index: number;
   paper_id: number | null;
+  paper_title?: string;
   chunk_id: number | null;
   seq: number | null;
   snippet: string;
