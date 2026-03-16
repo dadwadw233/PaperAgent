@@ -12,7 +12,7 @@ SuperPaperAgent 是一个面向研究者的本地论文库管理与 AI 辅助阅
 - 切片 Pipeline：从 PDF 提取文本并切分为 chunks，支持跳过已完成切片与停止任务。
 - 向量嵌入 Pipeline：对 chunks 生成 embeddings 写入向量库，支持模型配置、跳过已嵌入内容与停止任务，并显示完成进度。
 - AI 摘要 Pipeline：为论文生成多种形式的 AI 摘要/标签，支持跳过已摘要与停止任务。
-- AI Chat：基于论文内容对话（当前仍处于灰度阶段，见下文“项目状态”）。
+- AI Chat：基于论文内容对话，支持多会话管理（新建/切换/删除/本地持久化）与工具调用提醒。
 - 搜索：支持中文检索，并支持按标题/摘要/AI 总结等细粒度检索（灰度/持续完善中）。
 
 ### 环境依赖
@@ -129,7 +129,11 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 - 欢迎提交 Issue/PR，一起完善体验与稳定性。
 
 **RAG 说明**
-- 当前默认聊天主路径已切换为 RAG：向量召回 -> 可切换重排 -> 带引用生成（失败时回退词法检索与快速兜底答案）。
+- 当前默认聊天主路径为“规划器 + RAG 工具”：
+  - 模型先分析用户需求并输出 `<tool_call>...</tool_call>`；
+  - 再决定是否调用 `rag_search`（向量召回 -> 可切换重排 -> 带引用生成）；
+  - 如不需要检索，可跳过数据库搜索直接给出简短回复。
+- 当触发工具调用时，前端聊天区会显示工具调用提示；流式接口会返回 `tool_call` 事件。
 - 已支持全库问答与单论文过滤问答、引用校验与自动修复、重启后任务恢复与评测门禁。
 
 ### RAG 新能力（本地）
@@ -137,6 +141,8 @@ CSV 需与 Zotero 导出结构兼容，表头为英文列名，常用字段如�
 - `POST /chat` 支持 `scope=library|paper`（默认 `library`），并支持 `paper_id` 过滤。
 - 支持 `candidate_k`、`final_k`、`rerank`、`require_citations` 参数。
 - 响应新增 `citations`（可追溯 chunk 引用）与 `retrieval_meta`（检索与时延元数据）。
+- `retrieval_meta` 新增工具调用字段（如 `tool_call_invoked/tool_call_reason/tool_call_query/tool_call_scope`）用于审计本轮是否触发检索。
+- 流式 `POST /chat`（`stream=true`）新增 `tool_call` SSE 事件，事件顺序通常为：`tool_call -> delta... -> final -> done`。
 - 旧参数 `use_embeddings/send_full_text/max_chunks/top_k` 仍兼容一个版本周期；当使用旧参数时，`retrieval_meta` 会返回弃用提示（计划在 **2026-06-30** 后移除）。
 
 ### Pipeline 任务持久化与恢复
@@ -212,6 +218,7 @@ TS=$(date +%Y%m%d-%H%M%S)
 
 - **后端启动报 `sqlmodel/uvicorn` 未找到**：请确保使用 `.venv` 中的 Python；推荐直接运行 `./start_app.sh`。
 - **前后端无法互联**：确认后端 host 使用 `localhost/127.0.0.1`，并与前端 `VITE_API_BASE` 一致。
+- **聊天历史看起来“丢了”**：当前聊天采用“多会话本地持久化”，请在 Chat 页顶部 `Session` 下拉框切换历史会话；`New Session` 会开启全新上下文。
 
 ---
 
@@ -227,7 +234,7 @@ SuperPaperAgent is a local paper library manager with AI-assisted reading. It su
 - PDF Chunking pipeline: extract & split PDFs into chunks, with skip-existing and stop controls.
 - Embedding pipeline: generate embeddings for chunks into a vector store, with model settings, skip-existing and stop, plus completion stats.
 - AI Summary pipeline: generate multi-form summaries/tags, with skip-existing and stop, plus progress stats.
-- AI Chat: converse over your papers (currently in beta; see “Project Status”).
+- AI Chat: converse over your papers with multi-session management (new/switch/delete/local persistence) and tool-call notices.
 - Search: supports Chinese queries and fine-grained scopes (title/abstract/AI summaries), still evolving.
 
 ### Requirements
@@ -343,10 +350,17 @@ This project is in a fast‑moving beta stage:
 - Issues and PRs are very welcome.
 
 **RAG Notice**
-- The default chat path now runs full local RAG:
-  vector retrieval -> optional rerank -> citation-grounded generation.
+- The default chat path now uses a planner + RAG tool flow:
+  the model first outputs `<tool_call>...</tool_call>`, then decides whether to invoke `rag_search`.
+- If retrieval is needed: vector retrieval -> optional rerank -> citation-grounded generation.
+- If retrieval is not needed (small-talk/simple turns), the backend can skip DB retrieval for that turn.
 - It includes lexical fallback, citation validation/repair, and persistent pipeline job resume after restart.
 - Legacy chat fields (`use_embeddings/send_full_text/max_chunks/top_k`) remain temporarily for compatibility and are planned for removal after **2026-06-30**.
+
+**Streaming events**
+- Streaming `POST /chat` can now emit `tool_call` before answer deltas.
+- Typical event order: `tool_call -> delta... -> final -> done`.
+- `retrieval_meta` now includes planner/tool-call diagnostics (for example `tool_call_invoked`, `tool_call_reason`, `tool_call_query`).
 
 ### Contributing
 
