@@ -60,6 +60,11 @@ VECTOR_BACKEND_COOLDOWN_SECONDS = 900
 LEGACY_CHAT_FIELDS_REMOVAL_DATE = "2026-06-30"
 
 
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     query: str
     scope: str = "library"  # library|paper
@@ -74,6 +79,7 @@ class ChatRequest(BaseModel):
     send_full_text: Optional[bool] = None
     max_chunks: Optional[int] = None
     stream: bool = False
+    history: Optional[List[ChatTurn]] = None
 
 
 def get_db_session():
@@ -596,6 +602,27 @@ def get_prompt_controls(opts: Dict[str, Any], query: str) -> Dict[str, int]:
     }
 
 
+def format_chat_history(history: Optional[List[ChatTurn]], max_turns: int = 6, max_chars: int = 1200) -> str:
+    if not history:
+        return ""
+    normalized: List[str] = []
+    for turn in history[-max_turns:]:
+        role = (turn.role or "").strip().lower()
+        if role not in {"user", "assistant"}:
+            continue
+        text = " ".join((turn.content or "").split())
+        if not text:
+            continue
+        label = "User" if role == "user" else "Assistant"
+        normalized.append(f"{label}: {text}")
+    if not normalized:
+        return ""
+    merged = "\n".join(normalized)
+    if len(merged) > max_chars:
+        merged = merged[-max_chars:]
+    return merged
+
+
 def build_fallback_answer(contexts: List[Dict[str, Any]], query: str = "") -> str:
     is_zh = bool(re.search(r"[\u4e00-\u9fff]", query or ""))
     if not contexts:
@@ -906,8 +933,13 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             + ", ".join(anchor_terms)
             + "."
         )
+    history_text = format_chat_history(req.history)
+    history_prompt = ""
+    if history_text:
+        history_prompt = f"Recent conversation:\n{history_text}\n\n"
 
     user_prompt = (
+        f"{history_prompt}"
         f"Question: {req.query}\n\n"
         "Context snippets:\n"
         f"{context_text}\n\n"

@@ -68,6 +68,7 @@ export async function chatWithPaper(
     final_k?: number;
     rerank?: boolean;
     require_citations?: boolean;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
     // Legacy compatibility
     top_k?: number;
     use_embeddings?: boolean;
@@ -103,6 +104,7 @@ export async function chatWithPaperStream(
     final_k?: number;
     rerank?: boolean;
     require_citations?: boolean;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
     top_k?: number;
     use_embeddings?: boolean;
     send_full_text?: boolean;

@@ -53,6 +53,10 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     }
     setError(null);
     const prompt = input.trim();
+    const history = messages
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
+      .slice(-8)
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.trim() }));
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);
     setLoading(true);
@@ -110,6 +114,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
         final_k: finalK,
         rerank,
         require_citations: requireCitations,
+        history: history.length > 0 ? history : undefined,
         send_full_text: showDebug && debugSendFullText ? true : undefined,
       };
       const resp = await chatWithPaperStream(settings, payload, {
@@ -139,6 +144,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
             final_k: finalK,
             rerank,
             require_citations: requireCitations,
+            history: history.length > 0 ? history : undefined,
             send_full_text: showDebug && debugSendFullText ? true : undefined,
           });
           replaceLatestAssistant(fallback.answer || "", {
