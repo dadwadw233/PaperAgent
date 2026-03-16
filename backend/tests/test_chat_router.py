@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
+from typing import Optional
 
 from backend.app.routers import chat as chat_router
 
@@ -10,6 +12,52 @@ def build_client() -> TestClient:
     app = FastAPI()
     app.include_router(chat_router.router)
     return TestClient(app)
+
+
+def make_tool_plan(
+    *,
+    invoked: bool = True,
+    query: str = "test query",
+    scope: str = "library",
+    paper_id: Optional[int] = None,
+    candidate_k: int = 20,
+    final_k: int = 6,
+    rerank: bool = True,
+    reason: str = "test_plan",
+    source: str = "test",
+):
+    return {
+        "planner_source": source,
+        "planner_error": None,
+        "tool_call_invoked": invoked,
+        "tool_call_name": "rag_search" if invoked else None,
+        "tool_call_reason": reason,
+        "query": query,
+        "scope": scope,
+        "paper_id": paper_id,
+        "candidate_k": candidate_k,
+        "final_k": final_k,
+        "rerank": rerank,
+    }
+
+
+@pytest.fixture(autouse=True)
+def default_tool_planner(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "plan_rag_tool_call",
+        lambda cfg, req, opts, history_text: make_tool_plan(
+            invoked=True,
+            query=req.query,
+            scope=opts["scope"],
+            paper_id=opts["paper_id"],
+            candidate_k=opts["candidate_k"],
+            final_k=opts["final_k"],
+            rerank=opts["rerank"],
+            reason="default_test_search",
+            source="test_default",
+        ),
+    )
 
 
 def test_chat_scope_paper_requires_paper_id(monkeypatch):
@@ -121,9 +169,133 @@ def test_chat_stream_returns_sse_final_payload(monkeypatch):
         assert resp.status_code == 200
         body = "".join(chunk for chunk in resp.iter_text())
 
+    assert "event: tool_call" in body
     assert "event: delta" in body
     assert "event: final" in body
     assert "Streamed answer [1]." in body
+
+
+def test_chat_skips_retrieval_when_planner_declines_tool_call(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "read_config",
+        lambda session: {
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_MODEL": "local-model",
+            "LLM_API_KEY": "dummy",
+            "CHROMA_PERSIST_DIR": "./chroma_store",
+            "CHROMA_COLLECTION": "paper_chunks",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "plan_rag_tool_call",
+        lambda cfg, req, opts, history_text: make_tool_plan(
+            invoked=False,
+            query=req.query,
+            scope=opts["scope"],
+            paper_id=opts["paper_id"],
+            candidate_k=opts["candidate_k"],
+            final_k=opts["final_k"],
+            rerank=opts["rerank"],
+            reason="planner_skip_search",
+            source="model",
+        ),
+    )
+
+    def should_not_run(*args, **kwargs):
+        raise AssertionError("retrieval should be skipped when planner returns no_search")
+
+    monkeypatch.setattr(chat_router, "fetch_embedding_contexts", should_not_run)
+    monkeypatch.setattr(chat_router, "fetch_lexical_contexts", should_not_run)
+    monkeypatch.setattr(
+        chat_router,
+        "call_chat",
+        lambda cfg, system_prompt, user_prompt, max_tokens=320, timeout_seconds=8: "你好，我在。",
+    )
+
+    client = build_client()
+    resp = client.post("/chat", json={"query": "你好", "scope": "library"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["contexts"] == []
+    assert data["citations"] == []
+    assert data["retrieval_meta"]["retrieval_backend"] == "none"
+    assert data["retrieval_meta"]["tool_call_invoked"] is False
+    assert data["retrieval_meta"]["tool_call_reason"] == "planner_skip_search"
+
+
+def test_chat_uses_planner_tool_parameters(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "read_config",
+        lambda session: {
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_MODEL": "local-model",
+            "LLM_API_KEY": "dummy",
+            "CHROMA_PERSIST_DIR": "./chroma_store",
+            "CHROMA_COLLECTION": "paper_chunks",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "ensure_embedding_cfg",
+        lambda cfg: {"base_url": "http://localhost:11434/v1", "model": "embed-model", "api_key": "dummy"},
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "plan_rag_tool_call",
+        lambda cfg, req, opts, history_text: make_tool_plan(
+            invoked=True,
+            query="rewritten planner query",
+            scope="library",
+            paper_id=None,
+            candidate_k=9,
+            final_k=4,
+            rerank=False,
+            reason="planner_override",
+            source="model",
+        ),
+    )
+    captured = {}
+
+    def fake_fetch_embedding(cfg, query, candidate_k, paper_filter_id):
+        captured["query"] = query
+        captured["candidate_k"] = candidate_k
+        captured["paper_filter_id"] = paper_filter_id
+        return {
+            "contexts": [
+                {
+                    "paper_id": 30,
+                    "chunk_id": 3001,
+                    "seq": 1,
+                    "distance": 0.1,
+                    "vector_score": 0.91,
+                    "rerank_score": 0.0,
+                    "text": "Planner override retrieval context.",
+                }
+            ],
+            "source_collection": "paper_chunks",
+            "persist_dir": "./chroma_store",
+        }
+
+    monkeypatch.setattr(chat_router, "fetch_embedding_contexts", fake_fetch_embedding)
+    monkeypatch.setattr(
+        chat_router,
+        "call_chat",
+        lambda cfg, system_prompt, user_prompt, max_tokens=320, timeout_seconds=8: "Planner path answer [1].",
+    )
+
+    client = build_client()
+    resp = client.post("/chat", json={"query": "What changed?", "scope": "library"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert captured["query"] == "rewritten planner query"
+    assert captured["candidate_k"] == 9
+    assert data["retrieval_meta"]["candidate_k"] == 9
+    assert data["retrieval_meta"]["final_k_requested"] == 4
+    assert data["retrieval_meta"]["tool_call_invoked"] is True
+    assert data["retrieval_meta"]["tool_call_reason"] == "planner_override"
 
 
 def test_chat_retries_once_when_citations_missing(monkeypatch):

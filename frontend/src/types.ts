@@ -74,6 +74,14 @@ export interface ChatRetrievalMeta {
   final_k_requested: number;
   final_k_used: number;
   rerank_enabled: boolean;
+  tool_planner_source?: string | null;
+  tool_planner_error?: string | null;
+  tool_call_invoked?: boolean;
+  tool_call_name?: string | null;
+  tool_call_reason?: string | null;
+  tool_call_query?: string | null;
+  tool_call_scope?: "library" | "paper" | null;
+  tool_call_paper_id?: number | null;
   stream_enabled?: boolean;
   legacy_direct_mode: boolean;
   legacy_fields_used?: string[];
@@ -91,6 +99,15 @@ export interface ChatResponse {
   contexts: any[];
   citations: ChatCitation[];
   retrieval_meta: ChatRetrievalMeta;
+}
+
+export interface ChatToolCallEvent {
+  name: string;
+  scope?: "library" | "paper" | null;
+  paper_id?: number | null;
+  candidate_k?: number;
+  final_k?: number;
+  reason?: string;
 }
 
 export type ChatRole = "user" | "assistant" | "system";

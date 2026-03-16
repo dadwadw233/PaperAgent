@@ -1,4 +1,4 @@
-import { ChatResponse, PaperDetail, PaperListResponse, PipelineJob, Settings } from "./types";
+import { ChatResponse, ChatToolCallEvent, PaperDetail, PaperListResponse, PipelineJob, Settings } from "./types";
 
 function buildUrl(base: string, path: string, params?: Record<string, string | number | undefined>) {
   const url = new URL(path, base.endsWith("/") ? base : `${base}/`);
@@ -92,6 +92,7 @@ export async function chatWithPaper(
 type ChatStreamHandlers = {
   onDelta?: (delta: string) => void;
   onFinal?: (finalPayload: ChatResponse) => void;
+  onToolCall?: (toolCall: ChatToolCallEvent) => void;
 };
 
 export async function chatWithPaperStream(
@@ -161,6 +162,12 @@ export async function chatWithPaperStream(
       finalPayload = payloadObj as ChatResponse;
       if (handlers.onFinal) {
         handlers.onFinal(finalPayload);
+      }
+      return;
+    }
+    if (eventName === "tool_call") {
+      if (handlers.onToolCall) {
+        handlers.onToolCall(payloadObj as ChatToolCallEvent);
       }
       return;
     }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { chatWithPaper, chatWithPaperStream } from "../api";
 import { createChatSession, deriveChatSessionTitle, loadChatSessionStore, saveChatSessionStore } from "../storage";
-import { ChatCitation, ChatMessage, ChatRetrievalMeta, ChatSessionStore, PaperDetail, Settings } from "../types";
+import { ChatCitation, ChatMessage, ChatRetrievalMeta, ChatSessionStore, ChatToolCallEvent, PaperDetail, Settings } from "../types";
 
 interface Props {
   paper: PaperDetail | null;
@@ -186,6 +186,23 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
         return prev;
       });
     };
+    const buildToolNotice = (toolCall: ChatToolCallEvent): string => {
+      const scopeText = toolCall.scope === "paper" ? `paper #${toolCall.paper_id ?? "?"}` : "library";
+      const tuning =
+        typeof toolCall.candidate_k === "number" && typeof toolCall.final_k === "number"
+          ? ` (candidate_k=${toolCall.candidate_k}, final_k=${toolCall.final_k})`
+          : "";
+      return `RAG tool call: searching ${scopeText}${tuning}.`;
+    };
+    const appendSystemNotice = (text: string) => {
+      if (!text.trim()) return;
+      updateMessagesForSession(targetSessionId, (prev) => {
+        if (prev.some((message, index) => message.role === "system" && message.content === text && index >= prev.length - 3)) {
+          return prev;
+        }
+        return [...prev, { role: "system", content: text }];
+      });
+    };
 
     let streamedChars = 0;
     try {
@@ -201,6 +218,9 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
         send_full_text: showDebug && debugSendFullText ? true : undefined,
       };
       const resp = await chatWithPaperStream(settings, payload, {
+        onToolCall: (toolCall) => {
+          appendSystemNotice(buildToolNotice(toolCall));
+        },
         onDelta: (delta) => {
           streamedChars += delta.length;
           appendAssistantDelta(delta);
@@ -234,6 +254,18 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
             citations: fallback.citations || [],
             retrievalMeta: fallback.retrieval_meta || null,
           });
+          if (fallback.retrieval_meta?.tool_call_invoked) {
+            appendSystemNotice(
+              buildToolNotice({
+                name: fallback.retrieval_meta.tool_call_name || "rag_search",
+                scope: fallback.retrieval_meta.tool_call_scope || fallback.retrieval_meta.scope,
+                paper_id: fallback.retrieval_meta.tool_call_paper_id ?? fallback.retrieval_meta.paper_filter,
+                candidate_k: fallback.retrieval_meta.candidate_k,
+                final_k: fallback.retrieval_meta.final_k_requested,
+                reason: fallback.retrieval_meta.tool_call_reason || undefined,
+              }),
+            );
+          }
         } catch (fallbackErr) {
           dropEmptyAssistant();
           setError(fallbackErr instanceof Error ? fallbackErr.message : "Chat failed");
@@ -446,6 +478,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
                           <div className="assistant-source-meta">
                             retrieval {m.retrievalMeta.timings_ms.retrieval}ms · generation{" "}
                             {m.retrievalMeta.timings_ms.generation}ms
+                            {m.retrievalMeta.tool_call_invoked ? " · tool: rag_search" : ""}
                           </div>
                         )}
                       </div>

@@ -221,4 +221,26 @@ describe("ChatPanel", () => {
     const secondPayload = mockedChatWithPaperStream.mock.calls[1][1];
     expect(secondPayload.history).toBeUndefined();
   });
+
+  it("shows tool call reminder when stream emits tool event", async () => {
+    const user = userEvent.setup();
+    mockedChatWithPaperStream.mockImplementationOnce(async (_settings, _payload, handlers = {}) => {
+      handlers.onToolCall?.({
+        name: "rag_search",
+        scope: "library",
+        candidate_k: 20,
+        final_k: 6,
+      });
+      handlers.onDelta?.("Tool ");
+      handlers.onFinal?.(chatResponse);
+      return chatResponse;
+    });
+
+    render(<ChatPanel paper={null} settings={settings} />);
+
+    await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "Need evidence");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("RAG tool call: searching library (candidate_k=20, final_k=6).")).toBeInTheDocument();
+  });
 });

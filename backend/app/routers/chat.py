@@ -21,6 +21,7 @@ from backend.app.services.http_client import ExternalServiceError, post_json_wit
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+TOOL_CALL_PATTERN = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
 ENGLISH_STOPWORDS = {
     "a",
     "an",
@@ -58,6 +59,16 @@ VECTOR_BACKEND_DISABLED_UNTIL = 0.0
 VECTOR_BACKEND_DISABLED_REASON = ""
 VECTOR_BACKEND_COOLDOWN_SECONDS = 900
 LEGACY_CHAT_FIELDS_REMOVAL_DATE = "2026-06-30"
+TOOL_PLANNER_NO_SEARCH_HINTS = {
+    "hi",
+    "hello",
+    "thanks",
+    "thank you",
+    "你在说啥",
+    "你好",
+    "谢谢",
+    "在吗",
+}
 
 
 class ChatTurn(BaseModel):
@@ -207,6 +218,238 @@ def normalize_chat_options(req: ChatRequest) -> Dict[str, Any]:
         "legacy_direct_mode": legacy_direct_mode,
         "legacy_fields_used": sorted(set(legacy_fields_used)),
     }
+
+
+def clamp_int(value: Any, low: int, high: int) -> Optional[int]:
+    try:
+        out = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(low, min(high, out))
+
+
+def default_tool_plan(opts: Dict[str, Any], query: str, reason: str, planner_source: str, invoked: bool) -> Dict[str, Any]:
+    return {
+        "planner_source": planner_source,
+        "planner_error": None,
+        "tool_call_invoked": invoked,
+        "tool_call_name": "rag_search" if invoked else None,
+        "tool_call_reason": reason,
+        "query": query,
+        "scope": opts["scope"],
+        "paper_id": opts["paper_id"],
+        "candidate_k": opts["candidate_k"],
+        "final_k": opts["final_k"],
+        "rerank": opts["rerank"],
+    }
+
+
+def is_small_talk_query(query: str) -> bool:
+    normalized = " ".join((query or "").lower().split())
+    if not normalized:
+        return True
+    if len(normalized) > 36:
+        return False
+    if any(marker in normalized for marker in ("paper", "论文", "method", "retrieval", "citation", "evidence", "compare", "总结")):
+        return False
+    return normalized in TOOL_PLANNER_NO_SEARCH_HINTS
+
+
+def parse_tool_call_payload(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+    match = TOOL_CALL_PATTERN.search(text)
+    if not match:
+        return None
+    raw = match.group(1)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
+def sanitize_planned_tool_call(
+    raw_payload: Dict[str, Any],
+    req: ChatRequest,
+    opts: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    name = str(raw_payload.get("name") or "").strip().lower()
+    arguments = raw_payload.get("arguments")
+    args = arguments if isinstance(arguments, dict) else {}
+
+    if name == "no_search":
+        reason = str(args.get("reason") or "planner_skip_search").strip()[:160]
+        return {
+            "planner_source": "model",
+            "planner_error": None,
+            "tool_call_invoked": False,
+            "tool_call_name": None,
+            "tool_call_reason": reason or "planner_skip_search",
+            "query": req.query,
+            "scope": opts["scope"],
+            "paper_id": opts["paper_id"],
+            "candidate_k": opts["candidate_k"],
+            "final_k": opts["final_k"],
+            "rerank": opts["rerank"],
+        }
+
+    if name != "rag_search":
+        return None
+
+    planned_query = str(args.get("query") or req.query).strip()[:1000] or req.query
+    planned_scope = str(args.get("scope") or opts["scope"]).strip().lower()
+    if planned_scope not in {"library", "paper"}:
+        planned_scope = opts["scope"]
+
+    if opts["scope"] == "paper":
+        planned_scope = "paper"
+        planned_paper_id = opts["paper_id"]
+    else:
+        planned_paper_id = clamp_int(args.get("paper_id"), 1, 10_000_000)
+        if planned_scope == "paper" and planned_paper_id is None:
+            planned_scope = "library"
+            planned_paper_id = None
+
+    planned_final_k = clamp_int(args.get("final_k"), 1, 20) or opts["final_k"]
+    planned_candidate_k = clamp_int(args.get("candidate_k"), planned_final_k, 100) or opts["candidate_k"]
+    planned_candidate_k = max(planned_candidate_k, planned_final_k)
+    planned_rerank = args.get("rerank")
+    rerank = opts["rerank"] if not isinstance(planned_rerank, bool) else planned_rerank
+    reason = str(args.get("reason") or "planner_requested_search").strip()[:160]
+
+    return {
+        "planner_source": "model",
+        "planner_error": None,
+        "tool_call_invoked": True,
+        "tool_call_name": "rag_search",
+        "tool_call_reason": reason or "planner_requested_search",
+        "query": planned_query,
+        "scope": planned_scope,
+        "paper_id": planned_paper_id,
+        "candidate_k": planned_candidate_k,
+        "final_k": planned_final_k,
+        "rerank": rerank,
+    }
+
+
+def call_chat_planner(
+    model_cfg: Dict[str, str],
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 180,
+    timeout_seconds: int = 5,
+) -> str:
+    base_url = model_cfg.get("LLM_BASE_URL") or ""
+    model = model_cfg.get("LLM_MODEL") or ""
+    api_key = model_cfg.get("LLM_API_KEY") or ""
+    if not base_url or not model or not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing LLM configuration. Set LLM_BASE_URL/LLM_MODEL/LLM_API_KEY.",
+        )
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    try:
+        data = post_json_with_retry(
+            url,
+            headers=headers,
+            payload=payload,
+            timeout=max(2, timeout_seconds),
+            retries=0,
+            backoff_seconds=0.2,
+        )
+    except ExternalServiceError as exc:
+        raise HTTPException(status_code=502, detail=f"Planner request failed ({exc.category}): {exc.message}") from exc
+    try:
+        return data["choices"][0]["message"]["content"]
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unexpected planner response") from None
+
+
+def plan_rag_tool_call(
+    cfg: Dict[str, str],
+    req: ChatRequest,
+    opts: Dict[str, Any],
+    history_text: str,
+) -> Dict[str, Any]:
+    if opts["legacy_direct_mode"]:
+        return default_tool_plan(
+            opts,
+            query=req.query,
+            reason="legacy_direct_mode",
+            planner_source="legacy",
+            invoked=True,
+        )
+
+    heuristic_plan = default_tool_plan(
+        opts,
+        query=req.query,
+        reason="heuristic_default_search",
+        planner_source="heuristic",
+        invoked=not is_small_talk_query(req.query),
+    )
+    if not heuristic_plan["tool_call_invoked"]:
+        heuristic_plan["tool_call_reason"] = "heuristic_smalltalk_skip"
+
+    planner_system_prompt = (
+        "You decide whether to call a retrieval tool before answering. "
+        "Output exactly one tool block and nothing else.\n"
+        "If retrieval is needed, output:\n"
+        '<tool_call>{"name":"rag_search","arguments":{"query":"...","scope":"library|paper","paper_id":null,'
+        '"candidate_k":20,"final_k":6,"rerank":true,"reason":"..."}}</tool_call>\n'
+        "If retrieval is not needed, output:\n"
+        '<tool_call>{"name":"no_search","arguments":{"reason":"..."}}</tool_call>\n'
+        "Never invent paper_id."
+    )
+    planner_user_prompt = (
+        f"User question: {req.query}\n"
+        f"Recent conversation: {history_text or '(none)'}\n"
+        f"Requested scope: {opts['scope']}\n"
+        f"Selected paper_id: {opts['paper_id']}\n"
+        f"Current retrieval defaults: candidate_k={opts['candidate_k']}, final_k={opts['final_k']}, rerank={opts['rerank']}\n"
+    )
+
+    try:
+        planner_output = call_chat_planner(
+            cfg,
+            planner_system_prompt,
+            planner_user_prompt,
+            max_tokens=170,
+            timeout_seconds=4,
+        )
+    except HTTPException as exc:
+        fallback = dict(heuristic_plan)
+        fallback["planner_source"] = "heuristic_fallback"
+        fallback["planner_error"] = str(exc.detail)[:220]
+        return fallback
+
+    raw_payload = parse_tool_call_payload(planner_output)
+    if raw_payload is None:
+        fallback = dict(heuristic_plan)
+        fallback["planner_source"] = "heuristic_fallback"
+        fallback["planner_error"] = "planner_output_missing_tool_call"
+        return fallback
+
+    planned = sanitize_planned_tool_call(raw_payload, req=req, opts=opts)
+    if planned is None:
+        fallback = dict(heuristic_plan)
+        fallback["planner_source"] = "heuristic_fallback"
+        fallback["planner_error"] = "planner_output_invalid_tool_payload"
+        return fallback
+    return planned
 
 
 def tokenize_for_rerank(text: str) -> List[str]:
@@ -820,6 +1063,7 @@ def sse_event(event: str, payload: Dict[str, Any]) -> str:
 def build_retrieval_meta(
     *,
     opts: Dict[str, Any],
+    tool_plan: Dict[str, Any],
     prompt_controls: Dict[str, Any],
     contexts: List[Dict[str, Any]],
     retrieval_backend: str,
@@ -841,6 +1085,14 @@ def build_retrieval_meta(
         "rerank_enabled": opts["rerank"] and not opts["legacy_direct_mode"],
         "retrieval_backend": retrieval_backend,
         "retrieval_fallback_reason": retrieval_fallback_reason,
+        "tool_planner_source": tool_plan.get("planner_source"),
+        "tool_planner_error": tool_plan.get("planner_error"),
+        "tool_call_invoked": bool(tool_plan.get("tool_call_invoked")),
+        "tool_call_name": tool_plan.get("tool_call_name"),
+        "tool_call_reason": tool_plan.get("tool_call_reason"),
+        "tool_call_query": tool_plan.get("query"),
+        "tool_call_scope": tool_plan.get("scope"),
+        "tool_call_paper_id": tool_plan.get("paper_id"),
         "citation_repair_applied": citation_repair_applied,
         "llm_fallback_used": llm_fallback_used,
         "llm_fallback_reason": llm_fallback_reason,
@@ -875,30 +1127,44 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         raise HTTPException(status_code=400, detail="Query is empty")
 
     opts = normalize_chat_options(req)
+    history_text = format_chat_history(req.history)
+    tool_plan = plan_rag_tool_call(cfg, req, opts, history_text)
+    retrieval_opts = dict(opts)
+    if tool_plan.get("tool_call_invoked") and not opts["legacy_direct_mode"]:
+        retrieval_opts["scope"] = tool_plan.get("scope") or opts["scope"]
+        retrieval_opts["paper_id"] = tool_plan.get("paper_id")
+        retrieval_opts["candidate_k"] = tool_plan.get("candidate_k") or opts["candidate_k"]
+        retrieval_opts["final_k"] = tool_plan.get("final_k") or opts["final_k"]
+        retrieval_opts["rerank"] = bool(tool_plan.get("rerank"))
+
+    retrieval_query = str(tool_plan.get("query") or req.query).strip() or req.query
     retrieval_started = time.perf_counter()
     contexts: List[Dict[str, Any]] = []
     source_collection = None
     persist_dir = None
-    retrieval_backend = "direct_chunks" if opts["legacy_direct_mode"] else "vector"
+    retrieval_backend = "direct_chunks" if retrieval_opts["legacy_direct_mode"] else "vector"
     retrieval_fallback_reason: Optional[str] = None
     llm_fallback_used = False
     llm_fallback_reason: Optional[str] = None
-    prompt_controls = get_prompt_controls(opts, req.query)
+    prompt_controls = get_prompt_controls(retrieval_opts, req.query)
 
-    if opts["legacy_direct_mode"]:
+    if retrieval_opts["legacy_direct_mode"]:
         contexts = build_context_from_chunks(
             session=session,
-            paper_id=opts["paper_id"],
+            paper_id=retrieval_opts["paper_id"],
             max_chars=16000,
-            max_chunks=opts["final_k"],
+            max_chunks=retrieval_opts["final_k"],
         )
+    elif not tool_plan.get("tool_call_invoked"):
+        retrieval_backend = "none"
+        retrieval_fallback_reason = str(tool_plan.get("tool_call_reason") or "planner_skip_search")
     else:
         if vector_backend_disabled():
             search_result = fetch_lexical_contexts(
                 session=session,
-                query=req.query,
-                candidate_k=opts["candidate_k"],
-                paper_filter_id=opts["paper_id"],
+                query=retrieval_query,
+                candidate_k=retrieval_opts["candidate_k"],
+                paper_filter_id=retrieval_opts["paper_id"],
             )
             retrieval_backend = "lexical_fallback_cached"
             retrieval_fallback_reason = VECTOR_BACKEND_DISABLED_REASON
@@ -907,38 +1173,38 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
                 embed_cfg = ensure_embedding_cfg(cfg)
                 search_result = fetch_embedding_contexts(
                     cfg={**cfg, **embed_cfg},
-                    query=req.query,
-                    candidate_k=opts["candidate_k"],
-                    paper_filter_id=opts["paper_id"],
+                    query=retrieval_query,
+                    candidate_k=retrieval_opts["candidate_k"],
+                    paper_filter_id=retrieval_opts["paper_id"],
                 )
             except Exception as exc:
                 mark_vector_backend_failed(str(exc))
                 search_result = fetch_lexical_contexts(
                     session=session,
-                    query=req.query,
-                    candidate_k=opts["candidate_k"],
-                    paper_filter_id=opts["paper_id"],
+                    query=retrieval_query,
+                    candidate_k=retrieval_opts["candidate_k"],
+                    paper_filter_id=retrieval_opts["paper_id"],
                 )
                 retrieval_backend = "lexical_fallback"
                 retrieval_fallback_reason = str(exc)[:220]
         contexts = search_result["contexts"]
         source_collection = search_result["source_collection"]
         persist_dir = search_result["persist_dir"]
-        if opts["scope"] == "paper" and opts["paper_id"]:
+        if retrieval_opts["scope"] == "paper" and retrieval_opts["paper_id"]:
             summary_context = fetch_paper_summary_context(
                 session=session,
-                paper_id=opts["paper_id"],
-                query=req.query,
+                paper_id=retrieval_opts["paper_id"],
+                query=retrieval_query,
             )
             if summary_context:
                 contexts = [summary_context, *contexts]
 
     contexts = sort_and_select_contexts(
-        query=req.query,
+        query=retrieval_query,
         contexts=contexts,
-        final_k=opts["final_k"],
-        rerank=opts["rerank"] and not opts["legacy_direct_mode"],
-        scope=opts["scope"],
+        final_k=retrieval_opts["final_k"],
+        rerank=retrieval_opts["rerank"] and not retrieval_opts["legacy_direct_mode"],
+        scope=retrieval_opts["scope"],
     )
     contexts = apply_context_budget(
         contexts,
@@ -954,13 +1220,12 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         for idx, c in enumerate(contexts, start=1)
     )
     if not context_text:
-        context_text = "No retrieval context available."
+        context_text = "No retrieval context was used for this turn."
 
     base_system_prompt = (
         "You are a grounded research assistant. "
-        "Answer using only the provided context. "
-        "If context is insufficient, explicitly say you are unsure. "
-        "Cite every important claim using [n] where n is a context index."
+        "If retrieval context is provided, answer using that context and cite important claims using [n]. "
+        "If retrieval context is absent, answer briefly based on the conversation only and do not fabricate paper evidence."
     )
     strict_system_prompt = (
         base_system_prompt
@@ -974,7 +1239,6 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             + ", ".join(anchor_terms)
             + "."
         )
-    history_text = format_chat_history(req.history)
     history_prompt = ""
     if history_text:
         history_prompt = f"Recent conversation:\n{history_text}\n\n"
@@ -992,7 +1256,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     )
 
     generation_started = time.perf_counter()
-    require_citations = opts["require_citations"] and len(citations) > 0
+    require_citations = retrieval_opts["require_citations"] and len(citations) > 0
     citation_repair_applied = False
 
     if req.stream:
@@ -1001,6 +1265,18 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             nonlocal llm_fallback_reason
             nonlocal citation_repair_applied
             answer_parts: List[str] = []
+            if tool_plan.get("tool_call_invoked"):
+                yield sse_event(
+                    "tool_call",
+                    {
+                        "name": tool_plan.get("tool_call_name") or "rag_search",
+                        "scope": tool_plan.get("scope"),
+                        "paper_id": tool_plan.get("paper_id"),
+                        "candidate_k": tool_plan.get("candidate_k"),
+                        "final_k": tool_plan.get("final_k"),
+                        "reason": tool_plan.get("tool_call_reason"),
+                    },
+                )
             try:
                 for delta in call_chat_stream(
                     cfg,
@@ -1069,7 +1345,8 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             generation_ms = int((time.perf_counter() - generation_started) * 1000)
             total_ms = int((time.perf_counter() - started) * 1000)
             retrieval_meta = build_retrieval_meta(
-                opts=opts,
+                opts=retrieval_opts,
+                tool_plan=tool_plan,
                 prompt_controls=prompt_controls,
                 contexts=contexts,
                 retrieval_backend=retrieval_backend,
@@ -1155,7 +1432,8 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     total_ms = int((time.perf_counter() - started) * 1000)
 
     retrieval_meta = build_retrieval_meta(
-        opts=opts,
+        opts=retrieval_opts,
+        tool_plan=tool_plan,
         prompt_controls=prompt_controls,
         contexts=contexts,
         retrieval_backend=retrieval_backend,
