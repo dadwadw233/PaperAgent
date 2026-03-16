@@ -296,10 +296,13 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
                 {(() => {
                   const paperMap = new Map<number, { paperId: number; title: string }>();
                   (m.citations || []).forEach((citation) => {
-                    if (citation.paper_id == null || paperMap.has(citation.paper_id)) return;
-                    paperMap.set(citation.paper_id, {
-                      paperId: citation.paper_id,
-                      title: citation.paper_title?.trim() || `Paper #${citation.paper_id}`,
+                    const normalizedPaperId = Number(citation.paper_id);
+                    if (!Number.isFinite(normalizedPaperId) || normalizedPaperId <= 0 || paperMap.has(normalizedPaperId)) {
+                      return;
+                    }
+                    paperMap.set(normalizedPaperId, {
+                      paperId: normalizedPaperId,
+                      title: citation.paper_title?.trim() || `Paper #${normalizedPaperId}`,
                     });
                   });
                   const papers = Array.from(paperMap.values());

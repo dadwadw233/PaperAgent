@@ -87,7 +87,11 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     loadPapers(false, searchQuery);
   };
 
-  const ensurePaperVisible = async (paperId: number) => {
+  const ensurePaperVisible = async (paperIdInput: number) => {
+    const paperId = Number(paperIdInput);
+    if (!Number.isFinite(paperId) || paperId <= 0) {
+      return;
+    }
     setSelectedPaperId(paperId);
     try {
       const detail = await fetchPaperDetail(settings, paperId);

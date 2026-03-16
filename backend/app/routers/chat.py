@@ -506,27 +506,68 @@ def apply_context_budget(
 
 
 def attach_paper_titles(session: Session, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    paper_ids = sorted({int(row.get("paper_id")) for row in contexts if row.get("paper_id") is not None})
+    def _as_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            out = int(value)
+        except Exception:
+            return None
+        if out <= 0:
+            return None
+        return out
+
+    chunk_ids = sorted(
+        {
+            cid
+            for cid in (_as_int(row.get("chunk_id")) for row in contexts)
+            if cid is not None
+        }
+    )
+    chunk_to_paper: Dict[int, int] = {}
+    if chunk_ids:
+        chunk_rows = session.exec(select(Chunk.id, Chunk.paper_id).where(Chunk.id.in_(chunk_ids))).all()
+        for row in chunk_rows:
+            if isinstance(row, tuple):
+                chunk_id = _as_int(row[0])
+                paper_id = _as_int(row[1])
+            else:
+                chunk_id = _as_int(getattr(row, "id", None))
+                paper_id = _as_int(getattr(row, "paper_id", None))
+            if chunk_id is not None and paper_id is not None:
+                chunk_to_paper[chunk_id] = paper_id
+
+    enriched: List[Dict[str, Any]] = []
+    paper_ids: set[int] = set()
+    for row in contexts:
+        item = dict(row)
+        paper_id = _as_int(item.get("paper_id"))
+        if paper_id is None:
+            paper_id = chunk_to_paper.get(_as_int(item.get("chunk_id")) or -1)
+        if paper_id is not None:
+            item["paper_id"] = paper_id
+            paper_ids.add(paper_id)
+        enriched.append(item)
+
     if not paper_ids:
-        return contexts
-    rows = session.exec(select(Paper.id, Paper.title).where(Paper.id.in_(paper_ids))).all()
+        return enriched
+
+    rows = session.exec(select(Paper.id, Paper.title).where(Paper.id.in_(sorted(paper_ids)))).all()
     title_map: Dict[int, str] = {}
     for row in rows:
         if isinstance(row, tuple):
-            pid = int(row[0])
+            pid = _as_int(row[0])
             title = row[1]
         else:
-            pid = int(getattr(row, "id"))
+            pid = _as_int(getattr(row, "id", None))
             title = getattr(row, "title", None)
-        title_map[pid] = title or ""
+        if pid is not None:
+            title_map[pid] = title or ""
 
-    enriched: List[Dict[str, Any]] = []
-    for row in contexts:
-        item = dict(row)
-        paper_id = item.get("paper_id")
-        if paper_id is not None:
-            item["paper_title"] = title_map.get(int(paper_id)) or ""
-        enriched.append(item)
+    for item in enriched:
+        pid = _as_int(item.get("paper_id"))
+        if pid is not None:
+            item["paper_title"] = title_map.get(pid) or ""
     return enriched
 
 
@@ -945,6 +986,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         f"{context_text}\n\n"
         "Return a concise answer with explicit inline citations. "
         "Use no more than 2 short paragraphs and keep the total within 5 sentences. "
+        "Do not repeat the question verbatim at the beginning. "
         "Use the same language as the question."
         f"{anchor_hint}"
     )
