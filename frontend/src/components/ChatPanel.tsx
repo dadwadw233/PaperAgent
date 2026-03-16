@@ -10,6 +10,7 @@ interface Props {
 }
 
 export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) => {
+  const MAX_HISTORY_TURNS = 128;
   const [sessionStore, setSessionStore] = useState<ChatSessionStore>(() => loadChatSessionStore());
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +139,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     const targetSessionId = activeSessionId;
     const history = messages
       .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
-      .slice(-8)
+      .slice(-MAX_HISTORY_TURNS)
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.trim() }));
     setInput("");
     updateMessagesForSession(targetSessionId, (prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);

@@ -69,6 +69,8 @@ TOOL_PLANNER_NO_SEARCH_HINTS = {
     "谢谢",
     "在吗",
 }
+CHAT_HISTORY_MAX_TURNS = 128
+CHAT_HISTORY_MAX_CHARS = 128_000
 
 
 class ChatTurn(BaseModel):
@@ -886,7 +888,11 @@ def get_prompt_controls(opts: Dict[str, Any], query: str) -> Dict[str, int]:
     }
 
 
-def format_chat_history(history: Optional[List[ChatTurn]], max_turns: int = 6, max_chars: int = 1200) -> str:
+def format_chat_history(
+    history: Optional[List[ChatTurn]],
+    max_turns: int = CHAT_HISTORY_MAX_TURNS,
+    max_chars: int = CHAT_HISTORY_MAX_CHARS,
+) -> str:
     if not history:
         return ""
     normalized: List[str] = []
