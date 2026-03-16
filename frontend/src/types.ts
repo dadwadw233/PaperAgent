@@ -93,6 +93,28 @@ export interface ChatResponse {
   retrieval_meta: ChatRetrievalMeta;
 }
 
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+  citations?: ChatCitation[];
+  retrievalMeta?: ChatRetrievalMeta | null;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
+export interface ChatSessionStore {
+  activeSessionId: string;
+  sessions: ChatSession[];
+}
+
 export interface PipelineJob {
   job_id: string;
   job_type: string;

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatPanel } from "../ChatPanel";
 import type { PaperDetail, Settings } from "../../types";
 import { chatWithPaper, chatWithPaperStream } from "../../api";
+import { createChatSession, saveChatSessionStore } from "../../storage";
 
 vi.mock("../../api", () => ({
   chatWithPaper: vi.fn(),
@@ -13,6 +14,26 @@ vi.mock("../../api", () => ({
 
 const mockedChatWithPaper = vi.mocked(chatWithPaper);
 const mockedChatWithPaperStream = vi.mocked(chatWithPaperStream);
+
+function createMemoryStorage(): Storage {
+  const store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => (key in store ? store[key] : null),
+    setItem: (key: string, value: string) => {
+      store[key] = String(value);
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      Object.keys(store).forEach((key) => delete store[key]);
+    },
+    key: (index: number) => Object.keys(store)[index] ?? null,
+    get length() {
+      return Object.keys(store).length;
+    },
+  };
+}
 
 const settings: Settings = {
   apiBase: "http://127.0.0.1:8000",
@@ -78,6 +99,10 @@ const chatResponse = {
 
 describe("ChatPanel", () => {
   beforeEach(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: createMemoryStorage(),
+    });
     mockedChatWithPaper.mockReset();
     mockedChatWithPaperStream.mockReset();
     mockedChatWithPaper.mockResolvedValue(chatResponse);
@@ -143,5 +168,57 @@ describe("ChatPanel", () => {
     await user.click(screen.getByText("Sources (1 papers)"));
     await user.click(screen.getByRole("button", { name: "Open" }));
     expect(onJump).toHaveBeenCalledWith(7);
+  });
+
+  it("restores persisted session messages and uses them as history", async () => {
+    const user = userEvent.setup();
+    const seededSession = createChatSession(new Date("2026-03-16T00:00:00.000Z"));
+    seededSession.title = "Persisted Session";
+    seededSession.messages = [
+      { role: "user", content: "Earlier question" },
+      { role: "assistant", content: "Earlier answer [1]." },
+    ];
+    saveChatSessionStore({
+      activeSessionId: seededSession.id,
+      sessions: [seededSession],
+    });
+
+    render(<ChatPanel paper={null} settings={settings} />);
+
+    expect(screen.getByText("Earlier question")).toBeInTheDocument();
+    expect(screen.getByText("Earlier answer [1].")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "Follow-up");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(mockedChatWithPaperStream).toHaveBeenCalledTimes(1));
+    expect(mockedChatWithPaperStream).toHaveBeenCalledWith(
+      settings,
+      expect.objectContaining({
+        history: [
+          { role: "user", content: "Earlier question" },
+          { role: "assistant", content: "Earlier answer [1]." },
+        ],
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("new session starts with empty history", async () => {
+    const user = userEvent.setup();
+    render(<ChatPanel paper={null} settings={settings} />);
+
+    await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "First question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(mockedChatWithPaperStream).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "New Session" }));
+
+    await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "Second question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(mockedChatWithPaperStream).toHaveBeenCalledTimes(2));
+
+    const secondPayload = mockedChatWithPaperStream.mock.calls[1][1];
+    expect(secondPayload.history).toBeUndefined();
   });
 });

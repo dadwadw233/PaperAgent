@@ -1093,10 +1093,36 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+.chat-header-main {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+
 .chat-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.chat-session-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chat-session-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.chat-session-picker select {
+  min-width: 220px;
+  max-width: 360px;
 }
 
 .chat-options {
@@ -1655,5 +1681,14 @@ textarea:focus {
   .stats-grid,
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chat-session-picker {
+    width: 100%;
+  }
+
+  .chat-session-picker select {
+    width: 100%;
+    max-width: none;
   }
 }

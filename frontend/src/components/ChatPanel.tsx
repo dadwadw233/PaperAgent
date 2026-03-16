@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { chatWithPaper, chatWithPaperStream } from "../api";
-import { ChatCitation, ChatRetrievalMeta, PaperDetail, Settings } from "../types";
+import { createChatSession, deriveChatSessionTitle, loadChatSessionStore, saveChatSessionStore } from "../storage";
+import { ChatCitation, ChatMessage, ChatRetrievalMeta, ChatSessionStore, PaperDetail, Settings } from "../types";
 
 interface Props {
   paper: PaperDetail | null;
@@ -8,15 +9,8 @@ interface Props {
   onJumpToPaper?: (paperId: number) => void;
 }
 
-interface Message {
-  role: "user" | "assistant" | "system";
-  content: string;
-  citations?: ChatCitation[];
-  retrievalMeta?: ChatRetrievalMeta | null;
-}
-
 export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [sessionStore, setSessionStore] = useState<ChatSessionStore>(() => loadChatSessionStore());
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,6 +22,93 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
   const [requireCitations, setRequireCitations] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
   const [debugSendFullText, setDebugSendFullText] = useState(false);
+
+  const normalizeSessionStore = useCallback((store: ChatSessionStore): ChatSessionStore => {
+    if (!Array.isArray(store.sessions) || store.sessions.length === 0) {
+      const fallback = createChatSession();
+      return { activeSessionId: fallback.id, sessions: [fallback] };
+    }
+    if (!store.sessions.some((session) => session.id === store.activeSessionId)) {
+      return {
+        ...store,
+        activeSessionId: store.sessions[0].id,
+      };
+    }
+    return store;
+  }, []);
+
+  const updateSessionStore = useCallback(
+    (updater: (prev: ChatSessionStore) => ChatSessionStore) => {
+      setSessionStore((prev) => normalizeSessionStore(updater(normalizeSessionStore(prev))));
+    },
+    [normalizeSessionStore],
+  );
+
+  const activeSession = useMemo(
+    () => sessionStore.sessions.find((session) => session.id === sessionStore.activeSessionId) ?? sessionStore.sessions[0],
+    [sessionStore],
+  );
+  const activeSessionId = activeSession?.id;
+  const messages = activeSession?.messages || [];
+
+  useEffect(() => {
+    saveChatSessionStore(normalizeSessionStore(sessionStore));
+  }, [normalizeSessionStore, sessionStore]);
+
+  const updateMessagesForSession = useCallback(
+    (
+      sessionId: string,
+      updater: (previous: ChatMessage[]) => ChatMessage[],
+    ) => {
+      updateSessionStore((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((session) => {
+          if (session.id !== sessionId) {
+            return session;
+          }
+          const nextMessages = updater(session.messages);
+          return {
+            ...session,
+            messages: nextMessages,
+            title: deriveChatSessionTitle(nextMessages),
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      }));
+    },
+    [updateSessionStore],
+  );
+
+  const createNewSession = () => {
+    if (loading) return;
+    const nextSession = createChatSession();
+    updateSessionStore((prev) => ({
+      activeSessionId: nextSession.id,
+      sessions: [nextSession, ...prev.sessions].slice(0, 50),
+    }));
+    setInput("");
+    setError(null);
+  };
+
+  const deleteCurrentSession = () => {
+    if (loading || !activeSessionId) return;
+    updateSessionStore((prev) => {
+      const remaining = prev.sessions.filter((session) => session.id !== activeSessionId);
+      if (remaining.length === 0) {
+        const fallback = createChatSession();
+        return {
+          activeSessionId: fallback.id,
+          sessions: [fallback],
+        };
+      }
+      return {
+        activeSessionId: remaining[0].id,
+        sessions: remaining,
+      };
+    });
+    setInput("");
+    setError(null);
+  };
 
   const candidateKMin = finalK;
   const canUsePaperMode = Boolean(paper?.id);
@@ -43,6 +124,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
 
   const send = async () => {
     if (!input.trim()) return;
+    if (!activeSessionId) return;
     if (scope === "paper" && !paper?.id) {
       setError("Paper mode requires selecting a paper.");
       return;
@@ -53,18 +135,19 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     }
     setError(null);
     const prompt = input.trim();
+    const targetSessionId = activeSessionId;
     const history = messages
       .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
       .slice(-8)
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content.trim() }));
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);
+    updateMessagesForSession(targetSessionId, (prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);
     setLoading(true);
     const replaceLatestAssistant = (
       content: string,
       payload?: { citations?: ChatCitation[]; retrievalMeta?: ChatRetrievalMeta | null },
     ) => {
-      setMessages((prev) => {
+      updateMessagesForSession(targetSessionId, (prev) => {
         const next = [...prev];
         for (let i = next.length - 1; i >= 0; i -= 1) {
           if (next[i].role === "assistant") {
@@ -82,7 +165,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     };
     const appendAssistantDelta = (delta: string) => {
       if (!delta) return;
-      setMessages((prev) => {
+      updateMessagesForSession(targetSessionId, (prev) => {
         const next = [...prev];
         for (let i = next.length - 1; i >= 0; i -= 1) {
           if (next[i].role === "assistant") {
@@ -94,7 +177,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
       });
     };
     const dropEmptyAssistant = () => {
-      setMessages((prev) => {
+      updateMessagesForSession(targetSessionId, (prev) => {
         if (prev.length === 0) return prev;
         const last = prev[prev.length - 1];
         if (last.role === "assistant" && !last.content.trim()) {
@@ -166,15 +249,48 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
   return (
     <div className="chat">
       <div className="chat-header">
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span className="chat-title">Conversation</span>
-          {loading && <span className="pill info">Processing...</span>}
-          <span className="pill info">Default: Library RAG</span>
-          {paper?.id ? (
-            <span className="pill">Selected paper #{paper.id}</span>
-          ) : (
-            <span className="pill">No paper selected</span>
-          )}
+        <div className="chat-header-main">
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="chat-title">Conversation</span>
+            {loading && <span className="pill info">Processing...</span>}
+            <span className="pill info">Default: Library RAG</span>
+            <span className="pill">{messages.length} messages</span>
+            {paper?.id ? (
+              <span className="pill">Selected paper #{paper.id}</span>
+            ) : (
+              <span className="pill">No paper selected</span>
+            )}
+          </div>
+          <div className="chat-session-controls">
+            <label className="chat-session-picker">
+              <span>Session</span>
+              <select
+                value={activeSessionId}
+                onChange={(event) => {
+                  const nextSessionId = event.target.value;
+                  updateSessionStore((prev) => ({ ...prev, activeSessionId: nextSessionId }));
+                  setError(null);
+                }}
+                disabled={loading}
+              >
+                {sessionStore.sessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="ghost-btn" onClick={createNewSession} disabled={loading}>
+              New Session
+            </button>
+            <button
+              className="ghost-btn"
+              onClick={deleteCurrentSession}
+              disabled={loading || sessionStore.sessions.length <= 1}
+            >
+              Delete Session
+            </button>
+          </div>
         </div>
       </div>
 
