@@ -293,7 +293,7 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
                     if (citation.paper_id == null || paperMap.has(citation.paper_id)) return;
                     paperMap.set(citation.paper_id, {
                       paperId: citation.paper_id,
-                      title: citation.paper_title?.trim() || "Untitled",
+                      title: citation.paper_title?.trim() || `Paper #${citation.paper_id}`,
                     });
                   });
                   const papers = Array.from(paperMap.values());

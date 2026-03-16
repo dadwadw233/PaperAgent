@@ -596,21 +596,16 @@ def get_prompt_controls(opts: Dict[str, Any], query: str) -> Dict[str, int]:
     }
 
 
-def build_fallback_answer(contexts: List[Dict[str, Any]]) -> str:
+def build_fallback_answer(contexts: List[Dict[str, Any]], query: str = "") -> str:
+    is_zh = bool(re.search(r"[\u4e00-\u9fff]", query or ""))
     if not contexts:
+        if is_zh:
+            return "我无法给出可靠结论，因为没有检索到可用证据。"
         return "I am unsure because no reliable context was retrieved."
-    lines: List[str] = []
-    for idx, row in enumerate(contexts[:2], start=1):
-        text = " ".join((row.get("text") or "").split())
-        if len(text) > 220:
-            text = text[:220].rstrip() + "..."
-        if not text:
-            continue
-        prefix = "Evidence suggests" if idx == 1 else "Additional evidence"
-        lines.append(f"{prefix}: {text} [{idx}]")
-    if not lines:
-        return "I am unsure because context snippets are empty."
-    return "\n\n".join(lines)
+    refs = " ".join(f"[{idx}]" for idx in range(1, min(len(contexts), 2) + 1))
+    if is_zh:
+        return f"模型生成暂时不可用，请重试该问题。已检索到相关证据 {refs}。".strip()
+    return f"Model generation was unavailable. Please retry this question. Retrieved evidence is cited {refs}.".strip()
 
 
 def term_present(answer: str, term: str) -> bool:
@@ -950,7 +945,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
 
             answer = "".join(answer_parts).strip()
             if not answer:
-                answer = build_fallback_answer(contexts)
+                answer = build_fallback_answer(contexts, req.query)
                 llm_fallback_used = True
                 if not llm_fallback_reason:
                     llm_fallback_reason = "empty stream response"
@@ -967,7 +962,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
                         timeout_seconds=prompt_controls["llm_timeout_seconds"],
                     )
                 except HTTPException as exc:
-                    answer = build_fallback_answer(contexts)
+                    answer = build_fallback_answer(contexts, req.query)
                     llm_fallback_used = True
                     llm_fallback_reason = str(exc.detail)[:220]
 
@@ -977,7 +972,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
                     answer = repaired_answer
                     citation_repair_applied = True
             if require_citations and not citations_are_valid(answer, len(citations)):
-                fallback_answer = build_fallback_answer(contexts)
+                fallback_answer = build_fallback_answer(contexts, req.query)
                 if citations_are_valid(fallback_answer, len(citations)):
                     answer = fallback_answer
                     llm_fallback_used = True
@@ -1041,7 +1036,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
             timeout_seconds=prompt_controls["llm_timeout_seconds"],
         )
     except HTTPException as exc:
-        answer = build_fallback_answer(contexts)
+        answer = build_fallback_answer(contexts, req.query)
         llm_fallback_used = True
         llm_fallback_reason = str(exc.detail)[:220]
 
@@ -1055,7 +1050,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
                 timeout_seconds=prompt_controls["llm_timeout_seconds"],
             )
         except HTTPException as exc:
-            answer = build_fallback_answer(contexts)
+            answer = build_fallback_answer(contexts, req.query)
             llm_fallback_used = True
             llm_fallback_reason = str(exc.detail)[:220]
 
