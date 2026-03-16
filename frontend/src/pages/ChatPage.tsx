@@ -87,6 +87,34 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
     loadPapers(false, searchQuery);
   };
 
+  const ensurePaperVisible = async (paperId: number) => {
+    setSelectedPaperId(paperId);
+    try {
+      const detail = await fetchPaperDetail(settings, paperId);
+      setSelectedPaperDetail(detail);
+      setPapers((prev) => {
+        if (prev.some((item) => item.id === paperId)) {
+          return prev;
+        }
+        const injected: PaperListItem = {
+          id: detail.id,
+          key: detail.key,
+          title: detail.title,
+          item_type: detail.item_type,
+          year: detail.year,
+          doi: detail.doi,
+          url: detail.url,
+        };
+        return [injected, ...prev];
+      });
+      if (listRef.current) {
+        listRef.current.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    } catch (err) {
+      console.error("Failed to open paper from citation:", err);
+    }
+  };
+
   const handleScroll = useCallback(() => {
     if (!listRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = listRef.current;
@@ -191,7 +219,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
                     style={{ animationDelay: `${Math.min(idx * 0.03, 0.3)}s` }}
                   >
                     <div className="card-title" style={{ fontSize: 14 }}>
-                      {paper.title || "Untitled"}
+                      {paper.title || `Paper #${paper.id}`}
                     </div>
                     <div className="muted">
                       {paper.year ? `Year: ${paper.year}` : "Year: N/A"}
@@ -210,7 +238,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ settings }) => {
               paper={selectedPaperDetail}
               settings={settings}
               onJumpToPaper={(paperId) => {
-                setSelectedPaperId(paperId);
+                ensurePaperVisible(paperId);
               }}
             />
           </div>
