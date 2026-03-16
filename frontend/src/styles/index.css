@@ -1130,6 +1130,27 @@ textarea:focus {
   background: var(--bg-secondary);
 }
 
+.chat-retrieval {
+  flex-shrink: 0;
+  padding: 0 24px 16px 24px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+
+.chat-retrieval-panel {
+  margin: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.chat-citation-list {
+  display: grid;
+  gap: 8px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .chat-row {
   margin-bottom: 20px;
 }

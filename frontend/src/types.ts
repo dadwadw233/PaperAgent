@@ -73,6 +73,7 @@ export interface ChatRetrievalMeta {
   final_k_requested: number;
   final_k_used: number;
   rerank_enabled: boolean;
+  stream_enabled?: boolean;
   legacy_direct_mode: boolean;
   legacy_fields_used?: string[];
   legacy_fields_deprecation?: string | null;

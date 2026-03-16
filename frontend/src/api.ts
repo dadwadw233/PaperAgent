@@ -88,6 +88,107 @@ export async function chatWithPaper(
   return res.json();
 }
 
+type ChatStreamHandlers = {
+  onDelta?: (delta: string) => void;
+  onFinal?: (finalPayload: ChatResponse) => void;
+};
+
+export async function chatWithPaperStream(
+  settings: Settings,
+  payload: {
+    query: string;
+    scope?: "library" | "paper";
+    paper_id?: number;
+    candidate_k?: number;
+    final_k?: number;
+    rerank?: boolean;
+    require_citations?: boolean;
+    top_k?: number;
+    use_embeddings?: boolean;
+    send_full_text?: boolean;
+    max_chunks?: number;
+  },
+  handlers: ChatStreamHandlers = {},
+): Promise<ChatResponse> {
+  const url = buildUrl(settings.apiBase, "/chat");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ ...payload, stream: true }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Chat stream failed (${res.status}): ${text}`);
+  }
+  if (!res.body) {
+    throw new Error("Chat stream failed: empty response body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload: ChatResponse | null = null;
+
+  const flushEvent = (rawEvent: string) => {
+    if (!rawEvent.trim()) return;
+    let eventName = "message";
+    const dataLines: string[] = [];
+    rawEvent.split(/\r?\n/).forEach((line) => {
+      if (line.startsWith("event:")) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trim());
+      }
+    });
+    const dataText = dataLines.join("\n");
+    if (!dataText) return;
+    let payloadObj: any = {};
+    try {
+      payloadObj = JSON.parse(dataText);
+    } catch {
+      return;
+    }
+    if (eventName === "delta") {
+      const delta = payloadObj?.delta;
+      if (typeof delta === "string" && handlers.onDelta) {
+        handlers.onDelta(delta);
+      }
+      return;
+    }
+    if (eventName === "final") {
+      finalPayload = payloadObj as ChatResponse;
+      if (handlers.onFinal) {
+        handlers.onFinal(finalPayload);
+      }
+      return;
+    }
+    if (eventName === "error") {
+      throw new Error(payloadObj?.error || "Chat stream returned error event");
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const rawEvent = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      flushEvent(rawEvent);
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+
+  if (buffer.trim()) {
+    flushEvent(buffer);
+  }
+  if (!finalPayload) {
+    throw new Error("Chat stream ended without final payload");
+  }
+  return finalPayload;
+}
+
 export async function uploadCsv(
   settings: Settings,
   file: File,

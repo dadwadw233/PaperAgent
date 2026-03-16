@@ -74,6 +74,58 @@ def test_chat_returns_citations_and_retrieval_meta(monkeypatch):
     assert data["retrieval_meta"]["final_k_used"] == 1
 
 
+def test_chat_stream_returns_sse_final_payload(monkeypatch):
+    monkeypatch.setattr(
+        chat_router,
+        "read_config",
+        lambda session: {
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_MODEL": "local-model",
+            "LLM_API_KEY": "dummy",
+            "CHROMA_PERSIST_DIR": "./chroma_store",
+            "CHROMA_COLLECTION": "paper_chunks",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "ensure_embedding_cfg",
+        lambda cfg: {"base_url": "http://localhost:11434/v1", "model": "embed-model", "api_key": "dummy"},
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "fetch_embedding_contexts",
+        lambda cfg, query, candidate_k, paper_filter_id: {
+            "contexts": [
+                {
+                    "paper_id": 12,
+                    "chunk_id": 1001,
+                    "seq": 3,
+                    "distance": 0.1,
+                    "vector_score": 0.91,
+                    "rerank_score": 0.0,
+                    "text": "This paper introduces a robust retrieval strategy.",
+                }
+            ],
+            "source_collection": "paper_chunks",
+            "persist_dir": "./chroma_store",
+        },
+    )
+    monkeypatch.setattr(
+        chat_router,
+        "call_chat_stream",
+        lambda cfg, system_prompt, user_prompt, max_tokens=320, timeout_seconds=8: iter(["Streamed ", "answer [1]."]),
+    )
+
+    client = build_client()
+    with client.stream("POST", "/chat", json={"query": "What is the method?", "scope": "library", "stream": True}) as resp:
+        assert resp.status_code == 200
+        body = "".join(chunk for chunk in resp.iter_text())
+
+    assert "event: delta" in body
+    assert "event: final" in body
+    assert "Streamed answer [1]." in body
+
+
 def test_chat_retries_once_when_citations_missing(monkeypatch):
     monkeypatch.setattr(
         chat_router,

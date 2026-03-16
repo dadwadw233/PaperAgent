@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatPanel } from "../ChatPanel";
 import type { PaperDetail, Settings } from "../../types";
-import { chatWithPaper } from "../../api";
+import { chatWithPaper, chatWithPaperStream } from "../../api";
 
 vi.mock("../../api", () => ({
   chatWithPaper: vi.fn(),
+  chatWithPaperStream: vi.fn(),
 }));
 
 const mockedChatWithPaper = vi.mocked(chatWithPaper);
+const mockedChatWithPaperStream = vi.mocked(chatWithPaperStream);
 
 const settings: Settings = {
   apiBase: "http://127.0.0.1:8000",
@@ -76,7 +78,13 @@ const chatResponse = {
 describe("ChatPanel", () => {
   beforeEach(() => {
     mockedChatWithPaper.mockReset();
+    mockedChatWithPaperStream.mockReset();
     mockedChatWithPaper.mockResolvedValue(chatResponse);
+    mockedChatWithPaperStream.mockImplementation(async (_settings, _payload, handlers = {}) => {
+      handlers.onDelta?.("Grounded ");
+      handlers.onFinal?.(chatResponse);
+      return chatResponse;
+    });
   });
 
   it("sends library-scope payload without selected paper", async () => {
@@ -86,8 +94,8 @@ describe("ChatPanel", () => {
     await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "What is new?");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(mockedChatWithPaper).toHaveBeenCalledTimes(1));
-    expect(mockedChatWithPaper).toHaveBeenCalledWith(
+    await waitFor(() => expect(mockedChatWithPaperStream).toHaveBeenCalledTimes(1));
+    expect(mockedChatWithPaperStream).toHaveBeenCalledWith(
       settings,
       expect.objectContaining({
         query: "What is new?",
@@ -98,6 +106,7 @@ describe("ChatPanel", () => {
         rerank: true,
         require_citations: true,
       }),
+      expect.any(Object),
     );
     expect(await screen.findByText("Grounded answer [1].")).toBeInTheDocument();
   });
@@ -110,13 +119,14 @@ describe("ChatPanel", () => {
     await user.type(screen.getByPlaceholderText("Ask a question about your papers..."), "Summarize this paper");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(mockedChatWithPaper).toHaveBeenCalledTimes(1));
-    expect(mockedChatWithPaper).toHaveBeenCalledWith(
+    await waitFor(() => expect(mockedChatWithPaperStream).toHaveBeenCalledTimes(1));
+    expect(mockedChatWithPaperStream).toHaveBeenCalledWith(
       settings,
       expect.objectContaining({
         scope: "paper",
         paper_id: 7,
       }),
+      expect.any(Object),
     );
   });
 

@@ -1,10 +1,13 @@
+import json
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from chromadb import Client
 from chromadb.config import Settings
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+import httpx
 from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlmodel import Session, select
@@ -70,6 +73,7 @@ class ChatRequest(BaseModel):
     use_embeddings: Optional[bool] = None
     send_full_text: Optional[bool] = None
     max_chunks: Optional[int] = None
+    stream: bool = False
 
 
 def get_db_session():
@@ -651,6 +655,129 @@ def call_chat(
         raise HTTPException(status_code=500, detail="Unexpected LLM response") from None
 
 
+def call_chat_stream(
+    model_cfg: Dict[str, str],
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = 320,
+    timeout_seconds: int = 8,
+) -> Iterator[str]:
+    base_url = model_cfg.get("LLM_BASE_URL") or ""
+    model = model_cfg.get("LLM_MODEL") or ""
+    api_key = model_cfg.get("LLM_API_KEY") or ""
+    if not base_url or not model or not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing LLM configuration. Set LLM_BASE_URL/LLM_MODEL/LLM_API_KEY.",
+        )
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    try:
+        timeout = httpx.Timeout(timeout=max(5, timeout_seconds), connect=10.0)
+        with httpx.stream("POST", url, headers=headers, json=payload, timeout=timeout) as resp:
+            if not resp.is_success:
+                snapshot = (resp.text or "")[:500]
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"LLM stream failed ({resp.status_code}): {snapshot}",
+                )
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                chunk = line.strip()
+                if not chunk.startswith("data:"):
+                    continue
+                data_str = chunk[5:].strip()
+                if not data_str or data_str == "[DONE]":
+                    if data_str == "[DONE]":
+                        break
+                    continue
+                try:
+                    payload_obj = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                choices = payload_obj.get("choices") or []
+                if not choices:
+                    continue
+                choice = choices[0] or {}
+                delta_obj = choice.get("delta") or {}
+                delta = delta_obj.get("content")
+                if isinstance(delta, str) and delta:
+                    yield delta
+                    continue
+                text_delta = choice.get("text")
+                if isinstance(text_delta, str) and text_delta:
+                    yield text_delta
+    except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+        raise HTTPException(status_code=502, detail=f"LLM stream failed (timeout): {exc}") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"LLM stream failed (network_error): {exc}") from exc
+
+
+def sse_event(event: str, payload: Dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def build_retrieval_meta(
+    *,
+    opts: Dict[str, Any],
+    prompt_controls: Dict[str, Any],
+    contexts: List[Dict[str, Any]],
+    retrieval_backend: str,
+    retrieval_fallback_reason: Optional[str],
+    citation_repair_applied: bool,
+    llm_fallback_used: bool,
+    llm_fallback_reason: Optional[str],
+    retrieval_ms: int,
+    generation_ms: int,
+    total_ms: int,
+    stream_enabled: bool,
+) -> Dict[str, Any]:
+    return {
+        "scope": opts["scope"],
+        "paper_filter": opts["paper_id"],
+        "candidate_k": opts["candidate_k"],
+        "final_k_requested": opts["final_k"],
+        "final_k_used": len(contexts),
+        "rerank_enabled": opts["rerank"] and not opts["legacy_direct_mode"],
+        "retrieval_backend": retrieval_backend,
+        "retrieval_fallback_reason": retrieval_fallback_reason,
+        "citation_repair_applied": citation_repair_applied,
+        "llm_fallback_used": llm_fallback_used,
+        "llm_fallback_reason": llm_fallback_reason,
+        "answer_max_tokens": prompt_controls["max_tokens"],
+        "llm_timeout_seconds": prompt_controls["llm_timeout_seconds"],
+        "stream_enabled": stream_enabled,
+        "legacy_direct_mode": opts["legacy_direct_mode"],
+        "legacy_fields_used": opts["legacy_fields_used"],
+        "legacy_fields_deprecation": (
+            "Legacy chat fields "
+            "use_embeddings/send_full_text/max_chunks/top_k are deprecated and will be removed "
+            f"after {LEGACY_CHAT_FIELDS_REMOVAL_DATE}. "
+            "Use scope/paper_id/candidate_k/final_k/rerank/require_citations."
+            if opts["legacy_fields_used"]
+            else None
+        ),
+        "context_char_budget": prompt_controls["char_budget"],
+        "context_per_chunk_char_cap": prompt_controls["per_chunk_char_cap"],
+        "timings_ms": {
+            "retrieval": retrieval_ms,
+            "generation": generation_ms,
+            "total": total_ms,
+        },
+    }
+
+
 @router.post("")
 def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     started = time.perf_counter()
@@ -769,6 +896,115 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     )
 
     generation_started = time.perf_counter()
+    require_citations = opts["require_citations"] and len(citations) > 0
+    citation_repair_applied = False
+
+    if req.stream:
+        def event_stream():
+            nonlocal llm_fallback_used
+            nonlocal llm_fallback_reason
+            nonlocal citation_repair_applied
+            answer_parts: List[str] = []
+            try:
+                for delta in call_chat_stream(
+                    cfg,
+                    base_system_prompt,
+                    user_prompt,
+                    max_tokens=prompt_controls["max_tokens"],
+                    timeout_seconds=prompt_controls["llm_timeout_seconds"],
+                ):
+                    if not delta:
+                        continue
+                    answer_parts.append(delta)
+                    yield sse_event("delta", {"delta": delta})
+            except HTTPException as exc:
+                llm_fallback_used = True
+                llm_fallback_reason = str(exc.detail)[:220]
+
+            answer = "".join(answer_parts).strip()
+            if not answer:
+                answer = build_fallback_answer(contexts)
+                llm_fallback_used = True
+                if not llm_fallback_reason:
+                    llm_fallback_reason = "empty stream response"
+                if answer:
+                    yield sse_event("delta", {"delta": answer})
+
+            if require_citations and not llm_fallback_used and not citations_are_valid(answer, len(citations)):
+                try:
+                    answer = call_chat(
+                        cfg,
+                        strict_system_prompt,
+                        user_prompt,
+                        max_tokens=prompt_controls["max_tokens"],
+                        timeout_seconds=prompt_controls["llm_timeout_seconds"],
+                    )
+                except HTTPException as exc:
+                    answer = build_fallback_answer(contexts)
+                    llm_fallback_used = True
+                    llm_fallback_reason = str(exc.detail)[:220]
+
+            if require_citations and not citations_are_valid(answer, len(citations)):
+                repaired_answer = repair_citations(answer, len(citations))
+                if citations_are_valid(repaired_answer, len(citations)):
+                    answer = repaired_answer
+                    citation_repair_applied = True
+            if require_citations and not citations_are_valid(answer, len(citations)):
+                fallback_answer = build_fallback_answer(contexts)
+                if citations_are_valid(fallback_answer, len(citations)):
+                    answer = fallback_answer
+                    llm_fallback_used = True
+                    llm_fallback_reason = llm_fallback_reason or "citation validation failed after retry"
+                    citation_repair_applied = True
+            if require_citations:
+                normalized_answer = repair_citations(answer, len(citations))
+                if normalized_answer != answer:
+                    citation_repair_applied = True
+                    answer = normalized_answer
+            required_terms = infer_required_surface_terms(req.query)
+            if required_terms:
+                answer = enforce_required_terms(answer, required_terms, len(citations))
+                if require_citations:
+                    normalized_answer = repair_citations(answer, len(citations))
+                    if normalized_answer != answer:
+                        citation_repair_applied = True
+                        answer = normalized_answer
+
+            generation_ms = int((time.perf_counter() - generation_started) * 1000)
+            total_ms = int((time.perf_counter() - started) * 1000)
+            retrieval_meta = build_retrieval_meta(
+                opts=opts,
+                prompt_controls=prompt_controls,
+                contexts=contexts,
+                retrieval_backend=retrieval_backend,
+                retrieval_fallback_reason=retrieval_fallback_reason,
+                citation_repair_applied=citation_repair_applied,
+                llm_fallback_used=llm_fallback_used,
+                llm_fallback_reason=llm_fallback_reason,
+                retrieval_ms=retrieval_ms,
+                generation_ms=generation_ms,
+                total_ms=total_ms,
+                stream_enabled=True,
+            )
+            yield sse_event(
+                "final",
+                {
+                    "answer": answer,
+                    "contexts": contexts,
+                    "citations": citations,
+                    "retrieval_meta": retrieval_meta,
+                    "source_collection": source_collection,
+                    "persist_dir": persist_dir,
+                },
+            )
+            yield sse_event("done", {"ok": True})
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
     try:
         answer = call_chat(
             cfg,
@@ -782,8 +1018,6 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
         llm_fallback_used = True
         llm_fallback_reason = str(exc.detail)[:220]
 
-    require_citations = opts["require_citations"] and len(citations) > 0
-    citation_repair_applied = False
     if require_citations and not llm_fallback_used and not citations_are_valid(answer, len(citations)):
         try:
             answer = call_chat(
@@ -824,38 +1058,20 @@ def chat(req: ChatRequest, session: Session = Depends(get_db_session)):
     generation_ms = int((time.perf_counter() - generation_started) * 1000)
     total_ms = int((time.perf_counter() - started) * 1000)
 
-    retrieval_meta = {
-        "scope": opts["scope"],
-        "paper_filter": opts["paper_id"],
-        "candidate_k": opts["candidate_k"],
-        "final_k_requested": opts["final_k"],
-        "final_k_used": len(contexts),
-        "rerank_enabled": opts["rerank"] and not opts["legacy_direct_mode"],
-        "retrieval_backend": retrieval_backend,
-        "retrieval_fallback_reason": retrieval_fallback_reason,
-        "citation_repair_applied": citation_repair_applied,
-        "llm_fallback_used": llm_fallback_used,
-        "llm_fallback_reason": llm_fallback_reason,
-        "answer_max_tokens": prompt_controls["max_tokens"],
-        "llm_timeout_seconds": prompt_controls["llm_timeout_seconds"],
-        "legacy_direct_mode": opts["legacy_direct_mode"],
-        "legacy_fields_used": opts["legacy_fields_used"],
-        "legacy_fields_deprecation": (
-            "Legacy chat fields "
-            "use_embeddings/send_full_text/max_chunks/top_k are deprecated and will be removed "
-            f"after {LEGACY_CHAT_FIELDS_REMOVAL_DATE}. "
-            "Use scope/paper_id/candidate_k/final_k/rerank/require_citations."
-            if opts["legacy_fields_used"]
-            else None
-        ),
-        "context_char_budget": prompt_controls["char_budget"],
-        "context_per_chunk_char_cap": prompt_controls["per_chunk_char_cap"],
-        "timings_ms": {
-            "retrieval": retrieval_ms,
-            "generation": generation_ms,
-            "total": total_ms,
-        },
-    }
+    retrieval_meta = build_retrieval_meta(
+        opts=opts,
+        prompt_controls=prompt_controls,
+        contexts=contexts,
+        retrieval_backend=retrieval_backend,
+        retrieval_fallback_reason=retrieval_fallback_reason,
+        citation_repair_applied=citation_repair_applied,
+        llm_fallback_used=llm_fallback_used,
+        llm_fallback_reason=llm_fallback_reason,
+        retrieval_ms=retrieval_ms,
+        generation_ms=generation_ms,
+        total_ms=total_ms,
+        stream_enabled=False,
+    )
 
     return {
         "answer": answer,

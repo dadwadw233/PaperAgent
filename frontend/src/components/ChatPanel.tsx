@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { chatWithPaper } from "../api";
+import { chatWithPaper, chatWithPaperStream } from "../api";
 import { ChatCitation, ChatRetrievalMeta, PaperDetail, Settings } from "../types";
 
 interface Props {
@@ -54,10 +54,47 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
     setError(null);
     const prompt = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: prompt }]);
+    setMessages((prev) => [...prev, { role: "user", content: prompt }, { role: "assistant", content: "" }]);
     setLoading(true);
+    const replaceLatestAssistant = (content: string) => {
+      setMessages((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          if (next[i].role === "assistant") {
+            next[i] = { ...next[i], content };
+            break;
+          }
+        }
+        return next;
+      });
+    };
+    const appendAssistantDelta = (delta: string) => {
+      if (!delta) return;
+      setMessages((prev) => {
+        const next = [...prev];
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          if (next[i].role === "assistant") {
+            next[i] = { ...next[i], content: `${next[i].content || ""}${delta}` };
+            break;
+          }
+        }
+        return next;
+      });
+    };
+    const dropEmptyAssistant = () => {
+      setMessages((prev) => {
+        if (prev.length === 0) return prev;
+        const last = prev[prev.length - 1];
+        if (last.role === "assistant" && !last.content.trim()) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+    };
+
+    let streamedChars = 0;
     try {
-      const resp = await chatWithPaper(settings, {
+      const payload = {
         query: prompt,
         scope: debugSendFullText ? "paper" : scope,
         paper_id: debugSendFullText ? paper?.id : effectivePaperId,
@@ -66,18 +103,44 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
         rerank,
         require_citations: requireCitations,
         send_full_text: showDebug && debugSendFullText ? true : undefined,
+      };
+      const resp = await chatWithPaperStream(settings, payload, {
+        onDelta: (delta) => {
+          streamedChars += delta.length;
+          appendAssistantDelta(delta);
+        },
+        onFinal: (finalPayload) => {
+          setLatestCitations(finalPayload.citations || []);
+          setLatestMeta(finalPayload.retrieval_meta || null);
+          replaceLatestAssistant(finalPayload.answer || "");
+        },
       });
       setLatestCitations(resp.citations || []);
       setLatestMeta(resp.retrieval_meta || null);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: resp.answer,
-        },
-      ]);
+      replaceLatestAssistant(resp.answer || "");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Chat failed");
+      if (streamedChars === 0) {
+        try {
+          const fallback = await chatWithPaper(settings, {
+            query: prompt,
+            scope: debugSendFullText ? "paper" : scope,
+            paper_id: debugSendFullText ? paper?.id : effectivePaperId,
+            candidate_k: Math.max(candidateK, finalK),
+            final_k: finalK,
+            rerank,
+            require_citations: requireCitations,
+            send_full_text: showDebug && debugSendFullText ? true : undefined,
+          });
+          setLatestCitations(fallback.citations || []);
+          setLatestMeta(fallback.retrieval_meta || null);
+          replaceLatestAssistant(fallback.answer || "");
+        } catch (fallbackErr) {
+          dropEmptyAssistant();
+          setError(fallbackErr instanceof Error ? fallbackErr.message : "Chat failed");
+        }
+      } else {
+        setError(err instanceof Error ? err.message : "Chat stream failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -222,38 +285,40 @@ export const ChatPanel: React.FC<Props> = ({ paper, settings, onJumpToPaper }) =
       </div>
 
       {(latestMeta || latestCitations.length > 0) && (
-        <div className="summary-block" style={{ margin: "0 24px 16px 24px" }}>
-          <h4>Retrieval Meta</h4>
-          {latestMeta && (
-            <div className="muted" style={{ marginBottom: 8 }}>
-              scope={latestMeta.scope}, candidate_k={latestMeta.candidate_k}, final_k={latestMeta.final_k_used}/
-              {latestMeta.final_k_requested}, rerank={latestMeta.rerank_enabled ? "on" : "off"}, total=
-              {latestMeta.timings_ms.total}ms
-            </div>
-          )}
-          {latestCitations.length > 0 && (
-            <div style={{ display: "grid", gap: 8 }}>
-              {latestCitations.map((citation) => (
-                <div key={citation.index} className="card compact" style={{ cursor: "default" }}>
-                  <div className="card-title" style={{ fontSize: 13 }}>
-                    [{citation.index}] paper {citation.paper_id ?? "?"} · seq {citation.seq ?? "?"}
-                  </div>
-                  <div className="muted">{citation.snippet}</div>
-                  <div className="muted">
-                    score(vector={citation.score?.vector != null ? citation.score.vector.toFixed(4) : "n/a"}, rerank=
-                    {citation.score?.rerank != null ? citation.score.rerank.toFixed(4) : "n/a"})
-                  </div>
-                  {citation.paper_id && onJumpToPaper && (
-                    <div style={{ marginTop: 6 }}>
-                      <button className="ghost-btn" onClick={() => onJumpToPaper(citation.paper_id!)}>
-                        Jump to paper {citation.paper_id}
-                      </button>
+        <div className="chat-retrieval">
+          <div className="summary-block chat-retrieval-panel">
+            <h4>Retrieval Meta</h4>
+            {latestMeta && (
+              <div className="muted" style={{ marginBottom: 8 }}>
+                scope={latestMeta.scope}, candidate_k={latestMeta.candidate_k}, final_k={latestMeta.final_k_used}/
+                {latestMeta.final_k_requested}, rerank={latestMeta.rerank_enabled ? "on" : "off"}, total=
+                {latestMeta.timings_ms.total}ms
+              </div>
+            )}
+            {latestCitations.length > 0 && (
+              <div className="chat-citation-list">
+                {latestCitations.map((citation) => (
+                  <div key={citation.index} className="card compact" style={{ cursor: "default" }}>
+                    <div className="card-title" style={{ fontSize: 13 }}>
+                      [{citation.index}] paper {citation.paper_id ?? "?"} · seq {citation.seq ?? "?"}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+                    <div className="muted">{citation.snippet}</div>
+                    <div className="muted">
+                      score(vector={citation.score?.vector != null ? citation.score.vector.toFixed(4) : "n/a"}, rerank=
+                      {citation.score?.rerank != null ? citation.score.rerank.toFixed(4) : "n/a"})
+                    </div>
+                    {citation.paper_id && onJumpToPaper && (
+                      <div style={{ marginTop: 6 }}>
+                        <button className="ghost-btn" onClick={() => onJumpToPaper(citation.paper_id!)}>
+                          Jump to paper {citation.paper_id}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
